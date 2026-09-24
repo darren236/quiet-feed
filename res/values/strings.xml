@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Quiet Feed</string>
+    <string name="accessibility_service_name">Quiet Feed screen filter</string>
+    <string name="accessibility_service_description">Checks Instagram and Facebook screens, returns Home when an opened Reel or Short is detected, and limits Instagram to messages when selected.</string>
+</resources>

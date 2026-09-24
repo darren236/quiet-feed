@@ -1,0 +1,14 @@
+build/
+dist/
+gradle-app/.gradle/
+gradle-app/build/
+gradle-app/app/build/
+gradle-app/local.properties
+.DS_Store
+*.keystore
+*.jks
+*.p12
+*.pem
+*.key
+.env
+.env.*
