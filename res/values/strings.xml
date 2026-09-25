@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Quiet Feed</string>
-    <string name="accessibility_service_name">Quiet Feed screen filter</string>
-    <string name="accessibility_service_description">Checks Instagram and Facebook screens, returns Home when an opened Reel or Short is detected, and limits Instagram to messages when selected.</string>
+    <string name="app_name">QuietFeed: Shorts Blocker</string>
+    <string name="accessibility_service_name">QuietFeed: Shorts Blocker screen filter</string>
+    <string name="accessibility_service_description">Limits Instagram, Facebook, and TikTok short videos. TikTok can allow videos opened from chats while blocking its video feeds.</string>
 </resources>

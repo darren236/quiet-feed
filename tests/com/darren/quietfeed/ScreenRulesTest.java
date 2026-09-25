@@ -149,6 +149,75 @@ public final class ScreenRulesTest {
                 node("Password", "", "", false, 1100, 80));
         expect("Login remains available", ScreenRules.Screen.LOGIN, instagram(login));
 
+        List<ScreenRules.NodeData> tiktokForYou = nodes(
+                node("For You", "", "", true, 110, 80),
+                node("Inbox", "", "", false, 2250, 80),
+                railNode("", "Like video", 1350),
+                railNode("", "Comments", 1550),
+                railNode("", "Share video", 1750));
+        expect("TikTok For You feed is video", ScreenRules.Screen.REEL,
+                tiktok(tiktokForYou));
+        expect("TikTok For You feed cannot use chat viewer grant", false,
+                ScreenRules.tiktokOpenedViewer(tiktokForYou, DISPLAY_HEIGHT));
+
+        List<ScreenRules.NodeData> tiktokFriendsFeed = nodes(
+                node("Friends", "", "", true, 110, 80),
+                railNode("", "Like video", 1350),
+                railNode("", "Comments", 1550),
+                railNode("", "Share video", 1750));
+        expect("TikTok Friends tab is still a video feed", ScreenRules.Screen.REEL,
+                tiktok(tiktokFriendsFeed));
+
+        List<ScreenRules.NodeData> tiktokInbox = nodes(
+                node("Inbox", "", "", false, 110, 80),
+                node("Inbox", "", "tab_inbox", true, 2250, 80),
+                node("Messages", "", "", false, 400, 80));
+        expect("TikTok inbox", ScreenRules.Screen.DM_INBOX, tiktok(tiktokInbox));
+
+        List<ScreenRules.NodeData> tiktokChat = nodes(
+                node("", "Back", "", false, 110, 80),
+                wideNode("", "Shared video", "video_view", 450, 1550),
+                node("", "Like video", "", false, 1300, 80),
+                node("", "Comments", "", false, 1400, 80),
+                node("", "Share video", "", false, 1500, 80),
+                node("", "Message...", "", false, 2150, 100,
+                        "android.widget.EditText"));
+        expect("Shared TikTok preview remains a chat", ScreenRules.Screen.DM_THREAD,
+                tiktok(tiktokChat));
+
+        List<ScreenRules.NodeData> tiktokOpenedVideo = nodes(
+                node("", "Back", "", false, 110, 80),
+                railNode("", "Like video", 1350),
+                railNode("", "Comments", 1550),
+                railNode("", "Share video", 1750));
+        expect("Opened TikTok video", ScreenRules.Screen.REEL,
+                tiktok(tiktokOpenedVideo));
+        expect("Opened TikTok video can use a chat viewer grant", true,
+                ScreenRules.tiktokOpenedViewer(tiktokOpenedVideo, DISPLAY_HEIGHT));
+
+        List<ScreenRules.NodeData> tiktokViewerWithReply = nodes(
+                node("", "Back", "", false, 110, 80),
+                wideNode("", "Video", "video_pager", 0, 2300),
+                node("", "Message...", "", false, 2150, 100,
+                        "android.widget.EditText"));
+        expect("TikTok viewer reply field is not a chat", ScreenRules.Screen.REEL,
+                tiktok(tiktokViewerWithReply));
+
+        List<ScreenRules.NodeData> feedWithBackAndSelectedTab = nodes(
+                node("For You", "", "", true, 110, 80),
+                node("", "Back", "", false, 110, 80),
+                railNode("", "Like video", 1350),
+                railNode("", "Comments", 1550),
+                railNode("", "Share video", 1750));
+        expect("Selected feed tab blocks chat viewer grant", false,
+                ScreenRules.tiktokOpenedViewer(feedWithBackAndSelectedTab, DISPLAY_HEIGHT));
+
+        List<ScreenRules.NodeData> tiktokProfile = nodes(
+                node("Profile", "", "", false, 100, 80),
+                node("Inbox", "", "", false, 2250, 80));
+        expect("TikTok profile is outside messages", ScreenRules.Screen.OTHER,
+                tiktok(tiktokProfile));
+
         System.out.println("ScreenRules tests passed");
     }
 
@@ -158,6 +227,10 @@ public final class ScreenRulesTest {
 
     private static boolean facebook(List<ScreenRules.NodeData> nodes) {
         return ScreenRules.facebookReel(nodes, DISPLAY_HEIGHT, DISPLAY_WIDTH);
+    }
+
+    private static ScreenRules.Screen tiktok(List<ScreenRules.NodeData> nodes) {
+        return ScreenRules.tiktok(nodes, DISPLAY_HEIGHT, DISPLAY_WIDTH);
     }
 
     private static ScreenRules.NodeData node(String text, String description, String id,

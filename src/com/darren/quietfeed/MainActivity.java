@@ -37,6 +37,7 @@ public final class MainActivity extends Activity {
     private static final String PREFS = "quietfeed_prefs";
     private static final String INSTAGRAM_MODE = "instagram_mode";
     private static final String FACEBOOK_BLOCK_REELS = "facebook_block_reels";
+    private static final String TIKTOK_MODE = "tiktok_mode";
 
     private static final int BACKGROUND = Color.rgb(247, 248, 252);
     private static final int CARD = Color.WHITE;
@@ -54,6 +55,7 @@ public final class MainActivity extends Activity {
     private TextView accessibilityButton;
     private View statusDot;
     private final List<ModeRow> instagramRows = new ArrayList<>();
+    private final List<ModeRow> tiktokRows = new ArrayList<>();
 
     private static final class ModeRow {
         final String value;
@@ -104,8 +106,10 @@ public final class MainActivity extends Activity {
         addStatusCard(page);
         addInstagramCard(page);
         addFacebookCard(page);
+        addTikTokCard(page);
         addExplanationCard(page);
         updateInstagramSelection();
+        updateTikTokSelection();
         updateAccessibilityStatus();
     }
 
@@ -131,7 +135,7 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         nameParams.leftMargin = dp(12);
         brand.addView(nameBlock, nameParams);
-        nameBlock.addView(text("Quiet Feed", 23, INK, true));
+        nameBlock.addView(text("QuietFeed: Shorts Blocker", 20, INK, true));
         TextView eyebrow = text("YOUR SOCIAL, ON YOUR TERMS", 10, ACCENT, true);
         eyebrow.setLetterSpacing(0.12f);
         nameBlock.addView(eyebrow);
@@ -196,7 +200,7 @@ public final class MainActivity extends Activity {
         card.addView(accessibilityButton, buttonParams);
 
         TextView restrictedNote = text(
-                "Installing this APK yourself? If Android blocks accessibility access, open Settings → Apps → Quiet Feed → ⋮ → Allow restricted settings, then return here.",
+                "Installing this APK yourself? If Android blocks accessibility access, open Settings → Apps → QuietFeed: Shorts Blocker → ⋮ → Allow restricted settings, then return here.",
                 12, MUTED, false);
         restrictedNote.setLineSpacing(dp(2), 1f);
         LinearLayout.LayoutParams noteParams = new LinearLayout.LayoutParams(
@@ -324,13 +328,84 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private void addTikTokCard(LinearLayout page) {
+        LinearLayout card = card();
+        page.addView(card, cardParams(dp(16)));
+
+        addServiceHeading(card, "♪", "TikTok", "Keep chats and videos shared in them.",
+                Color.rgb(29, 29, 35));
+
+        addTikTokRow(card, "off", "Off", "Use TikTok normally.");
+        addTikTokRow(card, "dm", "Chats + shared videos",
+                "Use the inbox and chats. Watch a video opened directly from a chat until you swipe. The Friends feed is blocked.");
+    }
+
+    private void addTikTokRow(LinearLayout card, String value, String label, String description) {
+        LinearLayout row = horizontal();
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(14), dp(13), dp(13), dp(13));
+        row.setMinimumHeight(dp(70));
+
+        LinearLayout words = vertical();
+        row.addView(words, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        words.addView(text(label, 15, INK, true));
+        TextView detail = text(description, 12, MUTED, false);
+        detail.setLineSpacing(dp(1), 1f);
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        detailParams.topMargin = dp(3);
+        words.addView(detail, detailParams);
+
+        RadioButton radio = new RadioButton(this);
+        radio.setButtonTintList(ColorStateList.valueOf(ACCENT));
+        radio.setContentDescription("TikTok: " + label);
+        radio.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) {
+                selectTikTokMode(value);
+            }
+        });
+        LinearLayout.LayoutParams radioParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        radioParams.leftMargin = dp(8);
+        row.addView(radio, radioParams);
+
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) {
+                selectTikTokMode(value);
+            }
+        });
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.topMargin = dp(9);
+        card.addView(row, rowParams);
+        tiktokRows.add(new ModeRow(value, row, radio));
+    }
+
+    private void selectTikTokMode(String mode) {
+        preferences.edit().putString(TIKTOK_MODE, mode).apply();
+        updateTikTokSelection();
+    }
+
+    private void updateTikTokSelection() {
+        String selectedMode = preferences.getString(TIKTOK_MODE, "off");
+        for (ModeRow item : tiktokRows) {
+            boolean selected = item.value.equals(selectedMode);
+            item.radio.setChecked(selected);
+            item.container.setBackground(round(
+                    selected ? ACCENT_PALE : CARD, 12, selected ? ACCENT : BORDER));
+        }
+    }
+
     private void addExplanationCard(LinearLayout page) {
         LinearLayout card = card();
         page.addView(card, cardParams(0));
         card.addView(text("What to expect", 16, INK, true));
 
         TextView explanation = text(
-                "Opening a blocked Reel or Short shows a brief notice, then sends you to your phone's Home screen. Previews in the main feeds stay visible. In DM mode, Instagram's other areas show a way into messages, and scrolling away from a shared Reel sends you Home. App layout changes can affect detection.",
+                "Opening a blocked Instagram or Facebook Reel shows a brief notice, then sends you Home. Previews in those feeds stay visible. Instagram's DM mode lets you use messages and ends a shared Reel when you scroll. TikTok's chat mode covers video feeds with an inbox button; videos opened directly from a chat end when you swipe. The TikTok Friends feed is separate from chats. App layout changes can affect detection.",
                 13, MUTED, false);
         explanation.setLineSpacing(dp(3), 1f);
         LinearLayout.LayoutParams explanationParams = new LinearLayout.LayoutParams(
@@ -368,8 +443,8 @@ public final class MainActivity extends Activity {
         statusDot.setBackground(oval(enabled ? GREEN : AMBER));
         statusTitle.setText(enabled ? "Protection is ready" : "Turn on protection");
         statusDescription.setText(enabled
-                ? "Your choices are active while Quiet Feed accessibility access is enabled."
-                : "Enable Quiet Feed in Android Accessibility settings to apply your choices.");
+                ? "Your choices are active while QuietFeed: Shorts Blocker accessibility access is enabled."
+                : "Enable QuietFeed: Shorts Blocker in Android Accessibility settings to apply your choices.");
         accessibilityButton.setText(enabled
                 ? "Manage Accessibility access" : "Open Accessibility settings");
     }

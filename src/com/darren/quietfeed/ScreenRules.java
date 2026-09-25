@@ -3,7 +3,7 @@ package com.darren.quietfeed;
 import java.util.List;
 import java.util.Locale;
 
-/** Small, side effect free rules for the UI exposed by Instagram and Facebook. */
+/** Small, side effect free rules for the UI exposed by supported social apps. */
 final class ScreenRules {
     enum Screen { OTHER, LOGIN, DM_INBOX, DM_THREAD, REEL }
 
@@ -203,6 +203,99 @@ final class ScreenRules {
                 || (commentComposer && (verticalActionRail
                         || (viewerNavigation && like && comment && share))
                         && !profileNavigation && !imageViewer);
+    }
+
+    static Screen tiktok(List<NodeData> nodes, int displayHeight, int displayWidth) {
+        boolean inboxHeading = false;
+        boolean inboxTabSelected = false;
+        boolean messageComposer = false;
+        boolean login = false;
+        boolean password = false;
+        boolean videoContainer = false;
+        boolean fullScreenVideo = false;
+        boolean videoFeedHeading = false;
+        boolean viewerNavigation = false;
+        boolean like = false;
+        boolean comment = false;
+        boolean share = false;
+        int railLikeTop = -1;
+        int railCommentTop = -1;
+        int railShareTop = -1;
+
+        for (NodeData n : nodes) {
+            if (n.labelContains("inbox") && n.top < displayHeight / 4) inboxHeading = true;
+            if (isSelectedTab(n, "inbox", displayHeight)) inboxTabSelected = true;
+            if (n.top > displayHeight * 2 / 3
+                    && ((n.className.contains("edittext")
+                            && (n.labelContains("message") || n.idContains("message")
+                                    || n.idContains("chat_input")))
+                            || n.labelIs("message...") || n.labelIs("type a message")
+                            || n.labelIs("send a message"))) {
+                messageComposer = true;
+            }
+            if (n.labelIs("log in") || n.labelIs("login")) login = true;
+            if (n.labelIs("password")) password = true;
+
+            if (isLargeVisibleNode(n, displayHeight, displayWidth)
+                    && (n.idContains("video_player") || n.idContains("video_pager")
+                            || n.idContains("video_view")
+                            || n.idContains("aweme_video") || n.idContains("feed_video")
+                            || n.className.contains("surfaceview")
+                            || n.className.contains("textureview"))) {
+                videoContainer = true;
+                if (n.top < displayHeight / 6 && n.bottom > displayHeight * 4 / 5) {
+                    fullScreenVideo = true;
+                }
+            }
+            if (n.top < displayHeight / 4
+                    && (n.labelIs("for you") || n.labelIs("following")
+                            || n.labelIs("friends"))) {
+                videoFeedHeading = true;
+            }
+            if (isViewerNavigation(n, displayHeight)) viewerNavigation = true;
+            if (n.labelContains("like") || n.idContains("like")) like = true;
+            if (n.labelContains("comment") || n.idContains("comment")) comment = true;
+            if (n.labelContains("share") || n.idContains("share")) share = true;
+
+            if (n.left >= displayWidth * 2 / 3 && n.width <= displayWidth / 3
+                    && n.top > displayHeight * 2 / 5
+                    && n.bottom < displayHeight * 9 / 10) {
+                if (n.labelContains("like") || n.idContains("like"))
+                    railLikeTop = railLikeTop < 0 ? n.top : Math.min(railLikeTop, n.top);
+                if (n.labelContains("comment") || n.idContains("comment"))
+                    railCommentTop = railCommentTop < 0 ? n.top : Math.min(railCommentTop, n.top);
+                if (n.labelContains("share") || n.idContains("share"))
+                    railShareTop = railShareTop < 0 ? n.top : Math.min(railShareTop, n.top);
+            }
+        }
+
+        boolean verticalActionRail = railLikeTop >= 0
+                && railCommentTop > railLikeTop + displayHeight / 25
+                && railShareTop > railCommentTop + displayHeight / 25;
+        if (fullScreenVideo || verticalActionRail
+                || (videoContainer && like && comment && !messageComposer)
+                || (videoFeedHeading && like && comment && share)
+                || (viewerNavigation && like && comment && share && !messageComposer)) {
+            return Screen.REEL;
+        }
+        if (messageComposer) return Screen.DM_THREAD;
+        if (inboxHeading || inboxTabSelected) return Screen.DM_INBOX;
+        if (login && password) return Screen.LOGIN;
+        return Screen.OTHER;
+    }
+
+    static boolean tiktokOpenedViewer(List<NodeData> nodes, int displayHeight) {
+        boolean backOrClose = false;
+        boolean selectedFeedTab = false;
+        for (NodeData n : nodes) {
+            if (isViewerNavigation(n, displayHeight)) backOrClose = true;
+            if (n.selected && n.top < displayHeight / 4
+                    && (n.labelIs("for you") || n.labelIs("following")
+                            || n.labelIs("friends"))) {
+                selectedFeedTab = true;
+            }
+        }
+        return backOrClose && !selectedFeedTab;
     }
 
     private static boolean isLargeVisibleNode(NodeData n, int displayHeight, int displayWidth) {

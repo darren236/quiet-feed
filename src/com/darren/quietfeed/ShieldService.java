@@ -29,12 +29,16 @@ import java.util.List;
 public final class ShieldService extends AccessibilityService {
     private static final String INSTAGRAM = "com.instagram.android";
     private static final String FACEBOOK = "com.facebook.katana";
+    private static final String TIKTOK = "com.zhiliaoapp.musically";
+    private static final String TIKTOK_SG = "com.ss.android.ugc.trill";
     private static final String PREFS = "quietfeed_prefs";
     private static final long INSPECTION_DELAY_MS = 100;
     private static final long DM_SCROLL_ARM_DELAY_MS = 300;
     private static final long EXIT_COOLDOWN_MS = 1200;
     private static final long EXIT_NOTICE_LEAD_MS = 220;
     private static final long EXIT_NOTICE_HOLD_MS = 1400;
+    private static final long TIKTOK_OPEN_GRACE_MS = 4000;
+    private static final long TIKTOK_TRANSITION_GRACE_MS = 1200;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Rect tempBounds = new Rect();
@@ -42,6 +46,7 @@ public final class ShieldService extends AccessibilityService {
     private SharedPreferences.OnSharedPreferenceChangeListener preferenceListener;
     private WindowManager windowManager;
     private View overlay;
+    private String overlayPackage = "";
     private View exitNotice;
     private Runnable pendingHomeAction;
     private String targetPackage = "";
@@ -51,6 +56,13 @@ public final class ShieldService extends AccessibilityService {
     private long navigationGraceUntil;
     private boolean dmReelActive;
     private long dmReelAllowedAt;
+    private ScreenRules.Screen lastTikTokScreen = ScreenRules.Screen.OTHER;
+    private long pendingTikTokOpenUntil;
+    private long pendingTikTokOpenStartedAt;
+    private long lastTikTokChatAt;
+    private long tiktokNavigationGraceUntil;
+    private boolean tiktokSharedVideoActive;
+    private long tiktokVideoAllowedAt;
     private long exitSuppressedUntil;
     private long nextInspectionAt;
     private final Runnable inspection = new Runnable() {
@@ -69,7 +81,8 @@ public final class ShieldService extends AccessibilityService {
         windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         preferenceListener = new SharedPreferences.OnSharedPreferenceChangeListener() {
             @Override public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-                if ("instagram_mode".equals(key) || "facebook_block_reels".equals(key)) {
+                if ("instagram_mode".equals(key) || "facebook_block_reels".equals(key)
+                        || "tiktok_mode".equals(key)) {
                     handler.removeCallbacks(inspection);
                     nextInspectionAt = 0;
                     scheduleInspection(0);
@@ -87,7 +100,7 @@ public final class ShieldService extends AccessibilityService {
             if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                     || event.getEventType() == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
                 String className = asString(event.getClassName());
-                if (className.contains("MainActivity") || findTargetRoot() == null) {
+                if (className.contains("MainActivity")) {
                     clearTargetState();
                     hideOverlay();
                 }
@@ -109,16 +122,7 @@ public final class ShieldService extends AccessibilityService {
             return;
         }
 
-        if (!eventPackage.equals(targetPackage)) {
-            targetPackage = eventPackage;
-            lastInstagramScreen = ScreenRules.Screen.OTHER;
-            pendingDmOpenUntil = 0;
-            pendingDmOpenStartedAt = 0;
-            navigationGraceUntil = 0;
-            dmReelActive = false;
-            dmReelAllowedAt = 0;
-            exitSuppressedUntil = 0;
-        }
+        setTargetPackage(eventPackage);
 
         final long now = SystemClock.elapsedRealtime();
         if (now < exitSuppressedUntil) {
@@ -137,6 +141,18 @@ public final class ShieldService extends AccessibilityService {
                         pendingDmOpenUntil = 0;
                         pendingDmOpenStartedAt = 0;
                     }
+                } else if (isTikTok(eventPackage) && "dm".equals(tiktokMode())) {
+                    if (lastTikTokScreen == ScreenRules.Screen.DM_THREAD
+                            && isPossibleMediaOpen(source)) {
+                        pendingTikTokOpenUntil = now + TIKTOK_OPEN_GRACE_MS;
+                        pendingTikTokOpenStartedAt = now;
+                    } else {
+                        pendingTikTokOpenUntil = 0;
+                        pendingTikTokOpenStartedAt = 0;
+                        if (lastTikTokScreen == ScreenRules.Screen.DM_THREAD) {
+                            lastTikTokChatAt = 0;
+                        }
+                    }
                 }
             }
         }
@@ -149,14 +165,24 @@ public final class ShieldService extends AccessibilityService {
             exitTarget(eventPackage);
             return;
         }
+        if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED
+                && isTikTok(eventPackage) && tiktokSharedVideoActive
+                && lastTikTokScreen == ScreenRules.Screen.REEL
+                && now >= tiktokVideoAllowedAt + DM_SCROLL_ARM_DELAY_MS
+                && isTikTokViewerScroll(event)) {
+            exitTarget(eventPackage);
+            return;
+        }
 
         scheduleInspection(INSPECTION_DELAY_MS);
     }
 
     @Override public void onInterrupt() {
+        clearTargetState();
         hideOverlay();
         cancelPendingExit();
         hideExitNotice();
+        scheduleInspection(INSPECTION_DELAY_MS);
     }
 
     @Override public void onDestroy() {
@@ -181,7 +207,21 @@ public final class ShieldService extends AccessibilityService {
         navigationGraceUntil = 0;
         dmReelActive = false;
         dmReelAllowedAt = 0;
+        lastTikTokScreen = ScreenRules.Screen.OTHER;
+        pendingTikTokOpenUntil = 0;
+        pendingTikTokOpenStartedAt = 0;
+        lastTikTokChatAt = 0;
+        tiktokNavigationGraceUntil = 0;
+        tiktokSharedVideoActive = false;
+        tiktokVideoAllowedAt = 0;
         exitSuppressedUntil = 0;
+    }
+
+    private void setTargetPackage(String packageName) {
+        if (packageName.equals(targetPackage)) return;
+        clearTargetState();
+        targetPackage = packageName;
+        hideOverlay();
     }
 
     private void inspectCurrentScreen() {
@@ -196,7 +236,7 @@ public final class ShieldService extends AccessibilityService {
         }
         String packageName = String.valueOf(root.getPackageName());
         if (!isTarget(packageName)) return;
-        targetPackage = packageName;
+        setTargetPackage(packageName);
 
         // A disabled control should not inspect that app's text at all.
         if (INSTAGRAM.equals(packageName) && "off".equals(instagramMode())) {
@@ -205,6 +245,15 @@ public final class ShieldService extends AccessibilityService {
             return;
         }
         if (FACEBOOK.equals(packageName) && !facebookEnabled()) {
+            hideOverlay();
+            return;
+        }
+        if (isTikTok(packageName) && "off".equals(tiktokMode())) {
+            lastTikTokScreen = ScreenRules.Screen.OTHER;
+            tiktokSharedVideoActive = false;
+            pendingTikTokOpenUntil = 0;
+            pendingTikTokOpenStartedAt = 0;
+            lastTikTokChatAt = 0;
             hideOverlay();
             return;
         }
@@ -266,12 +315,65 @@ public final class ShieldService extends AccessibilityService {
                     pendingDmOpenUntil = 0;
                     pendingDmOpenStartedAt = 0;
                 }
-                showDmGate();
+                showDmGate(packageName);
             }
         } else if (FACEBOOK.equals(packageName)) {
             boolean reel = ScreenRules.facebookReel(nodes, displayHeight, displayWidth);
             if (reel) exitTarget(packageName);
             else hideOverlay();
+        } else if (isTikTok(packageName)) {
+            ScreenRules.Screen screen = ScreenRules.tiktok(nodes, displayHeight, displayWidth);
+            ScreenRules.Screen previousScreen = lastTikTokScreen;
+            lastTikTokScreen = screen;
+
+            if (screen == ScreenRules.Screen.DM_THREAD
+                    || screen == ScreenRules.Screen.DM_INBOX
+                    || screen == ScreenRules.Screen.LOGIN) {
+                tiktokSharedVideoActive = false;
+                tiktokVideoAllowedAt = 0;
+                tiktokNavigationGraceUntil = 0;
+                if (screen != ScreenRules.Screen.DM_THREAD) {
+                    pendingTikTokOpenUntil = 0;
+                    pendingTikTokOpenStartedAt = 0;
+                    lastTikTokChatAt = 0;
+                } else {
+                    lastTikTokChatAt = now;
+                }
+                hideOverlay();
+            } else if (screen == ScreenRules.Screen.REEL) {
+                boolean openedFromChat = ScreenRules.tiktokOpenedViewer(
+                        nodes, displayHeight);
+                boolean directChatTransition = lastTikTokChatAt > 0
+                        && (previousScreen == ScreenRules.Screen.DM_THREAD
+                                || now < lastTikTokChatAt + TIKTOK_TRANSITION_GRACE_MS);
+                if (!tiktokSharedVideoActive && openedFromChat
+                        && (now < pendingTikTokOpenUntil || directChatTransition)) {
+                    tiktokSharedVideoActive = true;
+                    tiktokVideoAllowedAt = now;
+                    pendingTikTokOpenUntil = 0;
+                    pendingTikTokOpenStartedAt = 0;
+                    lastTikTokChatAt = 0;
+                }
+                if (tiktokSharedVideoActive && openedFromChat) hideOverlay();
+                else showDmGate(packageName);
+            } else if (now < tiktokNavigationGraceUntil
+                    || (pendingTikTokOpenUntil > now
+                            && now < pendingTikTokOpenStartedAt
+                                    + TIKTOK_TRANSITION_GRACE_MS)) {
+                tiktokSharedVideoActive = false;
+                tiktokVideoAllowedAt = 0;
+                hideOverlay();
+                scheduleInspection(250);
+            } else {
+                tiktokSharedVideoActive = false;
+                tiktokVideoAllowedAt = 0;
+                if (now >= pendingTikTokOpenStartedAt + TIKTOK_TRANSITION_GRACE_MS) {
+                    pendingTikTokOpenUntil = 0;
+                    pendingTikTokOpenStartedAt = 0;
+                    lastTikTokChatAt = 0;
+                }
+                showDmGate(packageName);
+            }
         }
     }
 
@@ -300,6 +402,11 @@ public final class ShieldService extends AccessibilityService {
         dmReelAllowedAt = 0;
         pendingDmOpenUntil = 0;
         pendingDmOpenStartedAt = 0;
+        tiktokSharedVideoActive = false;
+        tiktokVideoAllowedAt = 0;
+        pendingTikTokOpenUntil = 0;
+        pendingTikTokOpenStartedAt = 0;
+        lastTikTokChatAt = 0;
         hideOverlay();
         showExitNotice();
         cancelPendingExit();
@@ -312,7 +419,7 @@ public final class ShieldService extends AccessibilityService {
                     hideExitNotice();
                     return;
                 }
-                // Accessibility can navigate Home; it cannot force-stop Meta apps.
+                // Accessibility can navigate Home; it cannot force-stop other apps.
                 if (performGlobalAction(GLOBAL_ACTION_HOME)) {
                     handler.removeCallbacks(dismissExitNotice);
                     handler.postDelayed(dismissExitNotice, EXIT_NOTICE_HOLD_MS);
@@ -346,14 +453,15 @@ public final class ShieldService extends AccessibilityService {
         card.setElevation(dp(12));
 
         TextView title = new TextView(this);
-        title.setText("Reel blocked");
+        title.setText(isTikTok(targetPackage) ? "Next video blocked" : "Reel blocked");
         title.setTextColor(0xFFFFFFFF);
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
-        card.addView(title);
+        card.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         TextView detail = new TextView(this);
-        detail.setText("Quiet Feed is taking you Home");
+        detail.setText("Taking you Home");
         detail.setTextColor(0xFFD4E0ED);
         detail.setTextSize(13);
         detail.setGravity(Gravity.CENTER);
@@ -389,13 +497,22 @@ public final class ShieldService extends AccessibilityService {
         return preferences.getString("instagram_mode", "reels");
     }
 
+    private String tiktokMode() {
+        if (preferences == null) preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
+        return preferences.getString("tiktok_mode", "off");
+    }
+
     private boolean facebookEnabled() {
         if (preferences == null) preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
         return preferences.getBoolean("facebook_block_reels", true);
     }
 
     private static boolean isTarget(String name) {
-        return INSTAGRAM.equals(name) || FACEBOOK.equals(name);
+        return INSTAGRAM.equals(name) || FACEBOOK.equals(name) || isTikTok(name);
+    }
+
+    private static boolean isTikTok(String name) {
+        return TIKTOK.equals(name) || TIKTOK_SG.equals(name);
     }
 
     private AccessibilityNodeInfo findTargetRoot() {
@@ -403,7 +520,7 @@ public final class ShieldService extends AccessibilityService {
         if (active != null && active.getPackageName() != null
                 && isTarget(active.getPackageName().toString())) return active;
 
-        // A background Instagram/Facebook window must not trigger a Home action.
+        // A background social app window must not trigger a Home action.
         List<AccessibilityWindowInfo> windows = getWindows();
         if (windows != null) {
             for (AccessibilityWindowInfo window : windows) {
@@ -466,8 +583,32 @@ public final class ShieldService extends AccessibilityService {
         return true;
     }
 
-    private void showDmGate() {
-        if (windowManager == null || overlay != null) return;
+    private boolean isTikTokViewerScroll(AccessibilityEvent event) {
+        AccessibilityNodeInfo source = event.getSource();
+        if (source == null) return false;
+        ScreenRules.NodeData sourceData = describe(source);
+        if (sourceData.idContains("comment") || sourceData.labelContains("comments")
+                || sourceData.className.contains("scrollview")
+                || sourceData.className.contains("recyclerview")
+                || sourceData.className.contains("listview")) return false;
+        source.getBoundsInScreen(tempBounds);
+        int height = getResources().getDisplayMetrics().heightPixels;
+        int width = getResources().getDisplayMetrics().widthPixels;
+        if (tempBounds.width() < width * 2 / 3
+                || tempBounds.height() < height * 3 / 5) return false;
+        if (sourceData.idContains("video_pager") || sourceData.idContains("feed_pager")
+                || sourceData.className.contains("viewpager")) return true;
+        if (Build.VERSION.SDK_INT < 28) return false;
+        long vertical = Math.abs((long) event.getScrollDeltaY());
+        long horizontal = Math.abs((long) event.getScrollDeltaX());
+        return vertical >= height / 3 && vertical > horizontal;
+    }
+
+    private void showDmGate(String packageName) {
+        if (windowManager == null) return;
+        if (overlay != null && packageName.equals(overlayPackage)) return;
+        hideOverlay();
+        final boolean tiktok = isTikTok(packageName);
 
         FrameLayout frame = new FrameLayout(this);
         frame.setBackgroundColor(0xF20B1120);
@@ -480,30 +621,35 @@ public final class ShieldService extends AccessibilityService {
         card.setBackground(cardBackground);
 
         TextView eyebrow = new TextView(this);
-        eyebrow.setText("QUIET FEED");
+        eyebrow.setText("QUIETFEED");
         eyebrow.setTextColor(0xFF70E0CC);
         eyebrow.setTextSize(12);
         eyebrow.setLetterSpacing(0.16f);
         card.addView(eyebrow);
 
         TextView title = new TextView(this);
-        title.setText("Messages only");
+        title.setText(tiktok ? "Chats only" : "Messages only");
         title.setTextColor(0xFFFFFFFF);
         title.setTextSize(25);
         title.setPadding(0, dp(12), 0, dp(8));
         card.addView(title);
 
         TextView body = new TextView(this);
-        body.setText("Instagram is limited to your inbox and chats. Reels opened directly from a chat can play until you scroll.");
+        body.setText(tiktok
+                ? "TikTok is limited to your inbox and chats. A video opened from a chat can play until you swipe. The Friends feed is still blocked."
+                : "Instagram is limited to your inbox and chats. Reels opened directly from a chat can play until you scroll.");
         body.setTextColor(0xFFBCC9D8);
         body.setTextSize(16);
         body.setLineSpacing(dp(3), 1f);
         card.addView(body);
 
         Button primary = new Button(this);
-        primary.setText("Open messages");
+        primary.setText(tiktok ? "Open TikTok inbox" : "Open messages");
         primary.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View view) { openInstagramMessages(); }
+            @Override public void onClick(View view) {
+                if (tiktok) openTikTokInbox(packageName);
+                else openInstagramMessages();
+            }
         });
         LinearLayout.LayoutParams primaryParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -536,6 +682,7 @@ public final class ShieldService extends AccessibilityService {
         try {
             windowManager.addView(frame, params);
             overlay = frame;
+            overlayPackage = packageName;
         } catch (RuntimeException ignored) { }
     }
 
@@ -544,16 +691,61 @@ public final class ShieldService extends AccessibilityService {
             try { windowManager.removeView(overlay); } catch (RuntimeException ignored) { }
         }
         overlay = null;
+        overlayPackage = "";
     }
 
     private void openInstagramMessages() {
-        AccessibilityNodeInfo root = findTargetRoot();
+        AccessibilityNodeInfo root = findVisibleTargetRootForGate(INSTAGRAM);
         AccessibilityNodeInfo button = findMessagesButton(root, 0);
         hideOverlay();
         navigationGraceUntil = SystemClock.elapsedRealtime() + 6000;
         boolean clicked = button != null && clickNodeOrParent(button);
         if (!clicked) Toast.makeText(this, "Tap the Instagram messages icon now", Toast.LENGTH_LONG).show();
         scheduleAfterGrace();
+    }
+
+    private void openTikTokInbox(String packageName) {
+        AccessibilityNodeInfo root = findVisibleTargetRootForGate(packageName);
+        AccessibilityNodeInfo button = findTikTokInboxButton(root, 0);
+        hideOverlay();
+        pendingTikTokOpenUntil = 0;
+        pendingTikTokOpenStartedAt = 0;
+        lastTikTokChatAt = 0;
+        tiktokSharedVideoActive = false;
+        tiktokNavigationGraceUntil = SystemClock.elapsedRealtime() + 2000;
+        boolean clicked = button != null && clickNodeOrParent(button);
+        if (!clicked) {
+            Toast.makeText(this, "Tap TikTok's Inbox tab now", Toast.LENGTH_LONG).show();
+        }
+        scheduleInspection(250);
+    }
+
+    private AccessibilityNodeInfo findVisibleTargetRootForGate(String packageName) {
+        AccessibilityNodeInfo active = findTargetRoot();
+        if (active != null && active.getPackageName() != null
+                && packageName.equals(active.getPackageName().toString())) return active;
+        List<AccessibilityWindowInfo> windows = getWindows();
+        if (windows == null) return null;
+        for (AccessibilityWindowInfo window : windows) {
+            if (window.getType() != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
+            AccessibilityNodeInfo root = window.getRoot();
+            if (root != null && root.getPackageName() != null
+                    && packageName.equals(root.getPackageName().toString())) return root;
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findTikTokInboxButton(AccessibilityNodeInfo node, int depth) {
+        if (node == null || depth > 30) return null;
+        ScreenRules.NodeData n = describe(node);
+        if ((n.labelContains("inbox") || n.idContains("inbox_tab")
+                || n.idContains("tab_inbox"))
+                && n.top > getResources().getDisplayMetrics().heightPixels * 2 / 3) return node;
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo found = findTikTokInboxButton(node.getChild(i), depth + 1);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private AccessibilityNodeInfo findMessagesButton(AccessibilityNodeInfo node, int depth) {
