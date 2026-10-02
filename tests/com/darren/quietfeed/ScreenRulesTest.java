@@ -260,6 +260,38 @@ public final class ScreenRulesTest {
                 node("Messages", "", "", false, 1100, 80), DISPLAY_HEIGHT));
         expect("Send button is not the DM tab", false, ScreenRules.instagramMessagesButton(
                 node("Send", "", "", false, 2250, 80), DISPLAY_HEIGHT));
+        List<ScreenRules.NodeData> commentsOverVideo = nodes(
+                wideNode("", "", "reels_viewer", 0, 2300),
+                wideNode("", "", "video_pager", 0, 2300),
+                railNode("Like", "", 1300),
+                railNode("Comment", "", 1500),
+                railNode("Share", "", 1700),
+                node("Comments", "", "", false, 500, 90),
+                node("Add a comment...", "", "", false, 2150, 100,
+                        "android.widget.EditText"));
+        expect("Instagram comments override underlying Reel", ScreenRules.Screen.COMMENTS,
+                instagram(commentsOverVideo));
+        expect("Facebook comments override underlying Reel", false,
+                facebook(commentsOverVideo));
+        expect("TikTok comments override underlying video", ScreenRules.Screen.COMMENTS,
+                tiktok(commentsOverVideo));
+        expect("Comment button alone is not an open comment panel", false,
+                ScreenRules.commentsPanel(tiktokOpenedVideo, DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        expect("Facebook viewer composer alone is still a Reel", true,
+                facebook(screenshotLikeFacebookViewer));
+        List<ScreenRules.NodeData> commentSheet = nodes(
+                wideNode("", "", "comments_bottom_sheet", 900, 1400));
+        expect("Dedicated comment sheet is recognized", true,
+                ScreenRules.commentsPanel(commentSheet, DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        List<ScreenRules.NodeData> commentListWithKeyboard = nodes(
+                wideNode("", "", "comments_list", 400, 1100),
+                node("Write a comment", "", "", false, 1600, 100,
+                        "android.widget.EditText"));
+        expect("Comment list with keyboard remains allowed", true,
+                ScreenRules.commentsPanel(commentListWithKeyboard, DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        expect("Comment heading alone does not exempt a video", false,
+                ScreenRules.commentsPanel(nodes(node("Comments", "", "", false, 500, 90)),
+                        DISPLAY_HEIGHT, DISPLAY_WIDTH));
         System.out.println("ScreenRules tests passed");
     }
 

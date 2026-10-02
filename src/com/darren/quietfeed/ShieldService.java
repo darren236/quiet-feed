@@ -161,7 +161,7 @@ public final class ShieldService extends AccessibilityService {
                 && INSTAGRAM.equals(eventPackage) && dmReelActive
                 && lastInstagramScreen == ScreenRules.Screen.REEL
                 && now >= dmReelAllowedAt + DM_SCROLL_ARM_DELAY_MS
-                && isLargeScroll(event)) {
+                && !currentCommentsPanel(eventPackage) && isLargeScroll(event)) {
             exitTarget(eventPackage);
             return;
         }
@@ -169,7 +169,7 @@ public final class ShieldService extends AccessibilityService {
                 && isTikTok(eventPackage) && tiktokSharedVideoActive
                 && lastTikTokScreen == ScreenRules.Screen.REEL
                 && now >= tiktokVideoAllowedAt + DM_SCROLL_ARM_DELAY_MS
-                && isTikTokViewerScroll(event)) {
+                && !currentCommentsPanel(eventPackage) && isTikTokViewerScroll(event)) {
             exitTarget(eventPackage);
             return;
         }
@@ -262,6 +262,15 @@ public final class ShieldService extends AccessibilityService {
         collect(root, nodes, 0);
         int displayHeight = getResources().getDisplayMetrics().heightPixels;
         int displayWidth = getResources().getDisplayMetrics().widthPixels;
+
+        if (ScreenRules.commentsPanel(nodes, displayHeight, displayWidth)) {
+            // Keep any existing shared-video grant while reading or writing comments.
+            cancelPendingExit();
+            hideExitNotice();
+            exitSuppressedUntil = 0;
+            hideOverlay();
+            return;
+        }
 
         if (INSTAGRAM.equals(packageName)) {
             String mode = instagramMode();
@@ -429,6 +438,11 @@ public final class ShieldService extends AccessibilityService {
                     return;
                 }
                 // Accessibility can navigate Home; it cannot force-stop other apps.
+                if (currentCommentsPanel(packageName)) {
+                    hideExitNotice();
+                    exitSuppressedUntil = 0;
+                    return;
+                }
                 if (performGlobalAction(GLOBAL_ACTION_HOME)) {
                     handler.removeCallbacks(dismissExitNotice);
                     handler.postDelayed(dismissExitNotice, EXIT_NOTICE_HOLD_MS);
@@ -582,9 +596,26 @@ public final class ShieldService extends AccessibilityService {
         return false;
     }
 
+    private boolean currentCommentsPanel(String packageName) {
+        AccessibilityNodeInfo root = findTargetRoot();
+        if (root == null || !packageName.equals(asString(root.getPackageName()))) return true;
+        List<ScreenRules.NodeData> nodes = new ArrayList<ScreenRules.NodeData>();
+        collect(root, nodes, 0);
+        return ScreenRules.commentsPanel(nodes, getResources().getDisplayMetrics().heightPixels,
+                getResources().getDisplayMetrics().widthPixels);
+    }
+
+    private boolean isCommentScrollSource(AccessibilityNodeInfo node) {
+        for (int i = 0; node != null && i < 5; i++, node = node.getParent()) {
+            ScreenRules.NodeData n = describe(node);
+            if (n.idContains("comment") || n.labelIs("comments")) return true;
+        }
+        return false;
+    }
+
     private boolean isLargeScroll(AccessibilityEvent event) {
         AccessibilityNodeInfo source = event.getSource();
-        if (source == null) return false;
+        if (source == null || isCommentScrollSource(source)) return false;
         source.getBoundsInScreen(tempBounds);
         int height = getResources().getDisplayMetrics().heightPixels;
         int width = getResources().getDisplayMetrics().widthPixels;
@@ -595,7 +626,7 @@ public final class ShieldService extends AccessibilityService {
 
     private boolean isTikTokViewerScroll(AccessibilityEvent event) {
         AccessibilityNodeInfo source = event.getSource();
-        if (source == null) return false;
+        if (source == null || isCommentScrollSource(source)) return false;
         ScreenRules.NodeData sourceData = describe(source);
         if (sourceData.idContains("comment") || sourceData.labelContains("comments")
                 || sourceData.className.contains("scrollview")

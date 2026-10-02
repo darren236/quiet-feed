@@ -5,7 +5,7 @@ import java.util.Locale;
 
 /** Small, side effect free rules for the UI exposed by supported social apps. */
 final class ScreenRules {
-    enum Screen { OTHER, LOGIN, DM_INBOX, DM_THREAD, REEL }
+    enum Screen { OTHER, LOGIN, DM_INBOX, DM_THREAD, REEL, COMMENTS }
 
     static final class NodeData {
         final String text;
@@ -58,6 +58,7 @@ final class ScreenRules {
     }
 
     static Screen instagram(List<NodeData> nodes, int displayHeight, int displayWidth) {
+        if (commentsPanel(nodes, displayHeight, displayWidth)) return Screen.COMMENTS;
         boolean messageEntry = false;
         boolean messageHeader = false;
         boolean threadComposer = false;
@@ -153,6 +154,7 @@ final class ScreenRules {
     }
 
     static boolean facebookReel(List<NodeData> nodes, int displayHeight, int displayWidth) {
+        if (commentsPanel(nodes, displayHeight, displayWidth)) return false;
         boolean viewerContainer = false;
         boolean fullScreenMedia = false;
         boolean reelTabSelected = false;
@@ -232,6 +234,7 @@ final class ScreenRules {
     }
 
     static Screen tiktok(List<NodeData> nodes, int displayHeight, int displayWidth) {
+        if (commentsPanel(nodes, displayHeight, displayWidth)) return Screen.COMMENTS;
         boolean inboxHeading = false;
         boolean inboxTabSelected = false;
         boolean messageComposer = false;
@@ -322,6 +325,35 @@ final class ScreenRules {
             }
         }
         return backOrClose && !selectedFeedTab;
+    }
+
+    static boolean commentsPanel(List<NodeData> nodes, int displayHeight, int displayWidth) {
+        boolean heading = false;
+        boolean composer = false;
+        boolean commentList = false;
+        boolean sorting = false;
+        for (NodeData n : nodes) {
+            boolean wide = n.width >= displayWidth / 3;
+            boolean list = n.idContains("comment_list") || n.idContains("comments_list")
+                    || n.idContains("comment_recycler") || n.idContains("comments_recycler");
+            if (wide && n.height >= displayHeight / 4 &&
+                    (n.idContains("comments_sheet") || n.idContains("comment_sheet")
+                            || n.idContains("comments_bottom_sheet")
+                            || n.idContains("comment_bottom_sheet"))) return true;
+            if (wide && list && n.height >= displayHeight / 4) commentList = true;
+            if (wide && n.top < displayHeight * 3 / 4
+                    && (n.labelIs("comments") || n.text.matches("[0-9.,km]+ comments")
+                            || n.text.matches("comments [0-9.,km]+")
+                            || n.idContains("comments_title") || n.idContains("comment_header")))
+                heading = true;
+            if (n.labelContains("add a comment") || n.labelContains("write a comment")
+                    || (n.className.contains("edittext") && n.labelContains("comment")))
+                composer = true;
+            if (n.labelIs("most relevant") || n.labelIs("newest")
+                    || n.labelIs("top comments") || n.labelIs("all comments")) sorting = true;
+        }
+        return (heading && (composer || commentList || sorting))
+                || (commentList && composer);
     }
 
     static boolean instagramMessagesButton(NodeData n, int displayHeight) {

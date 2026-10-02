@@ -18,7 +18,7 @@ The app is built with Android Gradle Plugin 8.12, Gradle 9.3.1, JDK 17 or newer,
 ./build.sh
 ```
 
-The signed APK is named with its version, such as `dist/QuietFeed-1.8.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
+The signed APK is named with its version, such as `dist/QuietFeed-1.9.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
 
 ## Install and enable
 
@@ -29,7 +29,7 @@ If Android shows **Restricted setting** instead of allowing the service, open **
 For a phone connected by USB with debugging enabled, you can also install the APK using:
 
 ```sh
-"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.8.apk
+"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.9.apk
 ```
 
 ## How it works
@@ -41,3 +41,5 @@ TikTok's **Block videos** option shows a centered notice and returns Home when a
 TikTok's **Chats + shared videos** mode is off by default. When enabled, it covers video feeds with a gate that opens the inbox, keeps chats available, and permits a video opened directly from a chat until the user swipes to another video. That swipe shows the centered notice and returns Home. The TikTok Friends feed is separate from chats and is blocked in this mode. QuietFeed: Shorts Blocker does not check who sent a message or access your TikTok account; it uses the on-screen path from a chat to decide whether a video is allowed.
 
 The app does not request internet access or social-media passwords. Social apps can change their interfaces, so a blocked video may appear briefly before detection, and an app update may require new detection rules.
+
+Detected comment panels are allowed in all three apps, including reading, writing, and scrolling comments. Closing comments returns to the underlying screen and its normal blocking rules.
