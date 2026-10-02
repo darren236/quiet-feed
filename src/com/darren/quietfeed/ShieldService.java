@@ -131,13 +131,17 @@ public final class ShieldService extends AccessibilityService {
         }
         if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_CLICKED) {
             AccessibilityNodeInfo source = event.getSource();
+            if (source == null && INSTAGRAM.equals(eventPackage)) {
+                pendingDmOpenUntil = 0;
+                pendingDmOpenStartedAt = 0;
+            }
             if (source != null) {
                 if (INSTAGRAM.equals(eventPackage) && "dm".equals(instagramMode())) {
                     if (lastInstagramScreen == ScreenRules.Screen.DM_THREAD && isPossibleMediaOpen(source)) {
                         // The next Reel viewer is eligible only when reached directly from a chat.
                         pendingDmOpenUntil = now + 3000;
                         pendingDmOpenStartedAt = now;
-                    } else if (lastInstagramScreen != ScreenRules.Screen.DM_THREAD) {
+                    } else {
                         pendingDmOpenUntil = 0;
                         pendingDmOpenStartedAt = 0;
                     }
@@ -275,7 +279,6 @@ public final class ShieldService extends AccessibilityService {
         if (INSTAGRAM.equals(packageName)) {
             String mode = instagramMode();
             ScreenRules.Screen screen = ScreenRules.instagram(nodes, displayHeight, displayWidth);
-            ScreenRules.Screen previousScreen = lastInstagramScreen;
             lastInstagramScreen = screen;
 
             if ("reels".equals(mode)) {
@@ -297,10 +300,13 @@ public final class ShieldService extends AccessibilityService {
                 }
                 hideOverlay();
             } else if (screen == ScreenRules.Screen.REEL) {
-                // A tapped view may disappear before Android delivers its click event.
-                // A direct transition from a confirmed chat to a Reel is also origin evidence.
-                if (!dmReelActive && (now < pendingDmOpenUntil
-                        || previousScreen == ScreenRules.Screen.DM_THREAD)) {
+                if (!ScreenRules.instagramSharedReelEligible(nodes, displayHeight, true)) {
+                    dmReelActive = false;
+                    dmReelAllowedAt = 0;
+                }
+                // A chat screen alone does not prove that this Reel was shared.
+                if (!dmReelActive && ScreenRules.instagramSharedReelEligible(
+                        nodes, displayHeight, now < pendingDmOpenUntil)) {
                     dmReelActive = true;
                     dmReelAllowedAt = now;
                     pendingDmOpenUntil = 0;

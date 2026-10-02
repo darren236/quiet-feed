@@ -54,6 +54,14 @@ final class ScreenRules {
             return text.contains(wanted) || description.contains(wanted) || hint.contains(wanted);
         }
 
+        boolean labelMatches(String pattern) {
+            return text.matches(pattern) || description.matches(pattern) || hint.matches(pattern);
+        }
+
+        boolean actionLabel(String action) {
+            return labelIs(action) || labelMatches(action + "[, ].*[0-9].*");
+        }
+
         boolean idContains(String value) { return id.contains(clean(value)); }
     }
 
@@ -130,9 +138,9 @@ final class ScreenRules {
                     || (n.selected && n.idContains("clips_tab"))) reelTabSelected = true;
             if (isViewerNavigation(n, displayHeight)) viewerNavigation = true;
             if (n.labelContains("original audio") || n.labelIs("use audio") || n.labelIs("remix")) originalAudio = true;
-            if (n.labelIs("like") || n.labelIs("likes")) like = true;
-            if (n.labelIs("comment") || n.labelIs("comments")) comment = true;
-            if (n.labelIs("share") || n.labelIs("send")) share = true;
+            if (n.actionLabel("like") || n.actionLabel("likes")) like = true;
+            if (n.actionLabel("comment") || n.actionLabel("comments")) comment = true;
+            if (n.actionLabel("share") || n.actionLabel("send")) share = true;
         }
 
         // A shared Reel preview in a chat is not a viewer. A reply field inside a
@@ -313,6 +321,16 @@ final class ScreenRules {
         return Screen.OTHER;
     }
 
+    static boolean instagramSharedReelEligible(List<NodeData> nodes, int displayHeight,
+                                              boolean pendingMediaClick) {
+        if (!pendingMediaClick) return false;
+        for (NodeData n : nodes) {
+            if (isSelectedTab(n, "reels", displayHeight)
+                    || (n.selected && n.idContains("clips_tab"))) return false;
+        }
+        return true;
+    }
+
     static boolean tiktokOpenedViewer(List<NodeData> nodes, int displayHeight) {
         boolean backOrClose = false;
         boolean selectedFeedTab = false;
@@ -342,8 +360,8 @@ final class ScreenRules {
                             || n.idContains("comment_bottom_sheet"))) return true;
             if (wide && list && n.height >= displayHeight / 4) commentList = true;
             if (wide && n.top < displayHeight * 3 / 4
-                    && (n.labelIs("comments") || n.text.matches("[0-9.,km]+ comments")
-                            || n.text.matches("comments [0-9.,km]+")
+                    && (n.labelIs("comments") || n.labelMatches("[0-9.,km]+ comments")
+                            || n.labelMatches("comments [0-9.,km]+")
                             || n.idContains("comments_title") || n.idContains("comment_header")))
                 heading = true;
             if (n.labelContains("add a comment") || n.labelContains("write a comment")

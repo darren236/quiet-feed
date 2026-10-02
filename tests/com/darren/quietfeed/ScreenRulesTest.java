@@ -292,6 +292,45 @@ public final class ScreenRulesTest {
         expect("Comment heading alone does not exempt a video", false,
                 ScreenRules.commentsPanel(nodes(node("Comments", "", "", false, 500, 90)),
                         DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        List<ScreenRules.NodeData> countedActions = nodes(
+                node("", "Back", "", false, 90, 80),
+                node("Original audio", "", "", false, 1800, 80),
+                railNode("", "Like, 100", 1300),
+                railNode("", "Comment, 20", 1500),
+                railNode("", "Share, 5", 1700));
+        expect("Counted Instagram controls identify an opened Reel", ScreenRules.Screen.REEL,
+                instagram(countedActions));
+        expect("Chat history alone cannot grant a Reel", false,
+                ScreenRules.instagramSharedReelEligible(countedActions, DISPLAY_HEIGHT, false));
+        expect("Recent chat media click permits an opened Reel", true,
+                ScreenRules.instagramSharedReelEligible(countedActions, DISPLAY_HEIGHT, true));
+        expect("Selected Reels feed cannot use a chat media click", false,
+                ScreenRules.instagramSharedReelEligible(reelTab, DISPLAY_HEIGHT, true));
+
+        List<ScreenRules.NodeData> countedFeed = nodes(
+                node("Home", "", "", true, 2250, 80),
+                railNode("", "Like, 100", 1300),
+                railNode("", "Comment, 20", 1500),
+                railNode("", "Share, 5", 1700));
+        expect("Counted controls alone do not turn Home into a viewer", ScreenRules.Screen.OTHER,
+                instagram(countedFeed));
+        for (int labelField = 0; labelField < 3; labelField++) {
+            List<ScreenRules.NodeData> describedComments = nodes(
+                    wideNode("", "", "reels_viewer", 0, 2300),
+                    wideNode("", "", "video_pager", 0, 2300),
+                    new ScreenRules.NodeData(labelField == 0 ? "128 comments" : "",
+                            labelField == 1 ? "128 comments" : "",
+                            labelField == 2 ? "128 comments" : "", "", "", false, true,
+                            500, 590, 500, 90),
+                    node("Add a comment...", "", "", false, 2150, 100,
+                            "android.widget.EditText"));
+            expect("Instagram counted comments label field " + labelField, ScreenRules.Screen.COMMENTS,
+                    instagram(describedComments));
+            expect("Facebook counted comments label field " + labelField, false,
+                    facebook(describedComments));
+            expect("TikTok counted comments label field " + labelField, ScreenRules.Screen.COMMENTS,
+                    tiktok(describedComments));
+        }
         System.out.println("ScreenRules tests passed");
     }
 

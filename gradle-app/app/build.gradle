@@ -1,15 +1,11 @@
 apply plugin: 'com.android.application'
 
 def signingFile = file('../../build/signing.properties')
-if (!signingFile.isFile()) {
-    throw new GradleException('Missing build/signing.properties. Run ./build.sh to prepare local signing.')
-}
 def signingProperties = new Properties()
-signingFile.withInputStream { signingProperties.load(it) }
+if (signingFile.isFile()) signingFile.withInputStream { signingProperties.load(it) }
 def signingPassword = signingProperties.getProperty('password')
-if (!signingPassword || !(signingPassword ==~ /[A-Za-z0-9]+/)) {
-    throw new GradleException('build/signing.properties must contain an alphanumeric password value.')
-}
+def hasReleaseSigning = signingPassword && signingPassword ==~ /[A-Za-z0-9]+/ &&
+        file('../../build/quietfeed.keystore').isFile()
 
 android {
     namespace 'com.darren.quietfeed'
@@ -19,8 +15,8 @@ android {
         applicationId 'com.darren.quietfeed'
         minSdk 23
         targetSdk 36
-        versionCode 10
-        versionName '1.9'
+        versionCode 11
+        versionName '1.10'
     }
 
     sourceSets {
@@ -32,7 +28,7 @@ android {
     }
 
     signingConfigs {
-        quietfeed {
+        if (hasReleaseSigning) quietfeed {
             storeFile file('../../build/quietfeed.keystore')
             storePassword signingPassword
             keyAlias 'quietfeed'
@@ -47,7 +43,25 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.quietfeed
+            if (hasReleaseSigning) signingConfig signingConfigs.quietfeed
         }
     }
 }
+
+// These rules are plain Java, so contributors can run them without an emulator or JUnit.
+def ruleClasses = layout.buildDirectory.dir('screen-rule-tests')
+def compileRules = tasks.register('compileScreenRuleTests', JavaCompile) {
+    source = files('../../src/com/darren/quietfeed/ScreenRules.java',
+            '../../tests/com/darren/quietfeed/ScreenRulesTest.java')
+    classpath = files()
+    destinationDirectory = ruleClasses
+    sourceCompatibility = '17'
+    targetCompatibility = '17'
+}
+def ruleTests = tasks.register('screenRulesTest', JavaExec) {
+    dependsOn compileRules
+    classpath = files(ruleClasses)
+    mainClass = 'com.darren.quietfeed.ScreenRulesTest'
+}
+tasks.matching { it.name in ['check', 'preReleaseBuild', 'testDebugUnitTest', 'testReleaseUnitTest'] }
+        .configureEach { dependsOn ruleTests }
