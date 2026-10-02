@@ -250,6 +250,16 @@ public final class ScreenRulesTest {
         expect("TikTok profile is outside messages", ScreenRules.Screen.OTHER,
                 tiktok(tiktokProfile));
 
+        expect("Instagram bottom DM tab", true, ScreenRules.instagramMessagesButton(
+                node("", "Messages, 2 unread, tab", "", false, 2250, 80), DISPLAY_HEIGHT));
+        expect("Instagram top Messages icon", true, ScreenRules.instagramMessagesButton(
+                node("", "Messages", "", false, 100, 80), DISPLAY_HEIGHT));
+        expect("Instagram direct tab resource", true, ScreenRules.instagramMessagesButton(
+                node("", "", "tab_direct", false, 2250, 80), DISPLAY_HEIGHT));
+        expect("Chat message text is not a navigation tab", false, ScreenRules.instagramMessagesButton(
+                node("Messages", "", "", false, 1100, 80), DISPLAY_HEIGHT));
+        expect("Send button is not the DM tab", false, ScreenRules.instagramMessagesButton(
+                node("Send", "", "", false, 2250, 80), DISPLAY_HEIGHT));
         System.out.println("ScreenRules tests passed");
     }
 

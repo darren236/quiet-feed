@@ -705,12 +705,28 @@ public final class ShieldService extends AccessibilityService {
     }
 
     private void openInstagramMessages() {
-        AccessibilityNodeInfo root = findVisibleTargetRootForGate(INSTAGRAM);
-        AccessibilityNodeInfo button = findMessagesButton(root, 0);
         hideOverlay();
-        navigationGraceUntil = SystemClock.elapsedRealtime() + 6000;
-        boolean clicked = button != null && clickNodeOrParent(button);
-        if (!clicked) Toast.makeText(this, "Tap the Instagram messages icon now", Toast.LENGTH_LONG).show();
+        pendingDmOpenUntil = 0;
+        pendingDmOpenStartedAt = 0;
+        dmReelActive = false;
+        navigationGraceUntil = SystemClock.elapsedRealtime() + 2000;
+        // Reacquire the app tree after removing our overlay; old nodes can be stale.
+        handler.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (!INSTAGRAM.equals(targetPackage)) return;
+                AccessibilityNodeInfo root = findTargetRoot();
+                if (root == null || !INSTAGRAM.equals(asString(root.getPackageName()))) return;
+                AccessibilityNodeInfo button = findMessagesButton(root, 0);
+                boolean clicked = button != null && clickNodeOrParent(button);
+                if (!clicked) {
+                    Toast.makeText(ShieldService.this,
+                            "Instagram's DM button wasn't found. Tap its Messages tab.",
+                            Toast.LENGTH_LONG).show();
+                }
+                scheduleInspection(250);
+                scheduleAfterGrace();
+            }
+        }, 150);
         scheduleAfterGrace();
     }
 
@@ -759,16 +775,23 @@ public final class ShieldService extends AccessibilityService {
     }
 
     private AccessibilityNodeInfo findMessagesButton(AccessibilityNodeInfo node, int depth) {
-        if (node == null || depth > 30) return null;
+        if (node == null || depth > 30 || !node.isVisibleToUser()) return null;
         ScreenRules.NodeData n = describe(node);
-        if ((n.labelIs("messages") || n.labelIs("inbox") || n.labelIs("direct")
-                || n.idContains("direct_inbox") || n.idContains("direct_tab"))
-                && n.top < getResources().getDisplayMetrics().heightPixels / 3) return node;
+        if (ScreenRules.instagramMessagesButton(n,
+                getResources().getDisplayMetrics().heightPixels) && hasClickableParent(node)) return node;
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo found = findMessagesButton(node.getChild(i), depth + 1);
             if (found != null) return found;
         }
         return null;
+    }
+
+    private boolean hasClickableParent(AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo current = node;
+        for (int i = 0; current != null && i < 4; i++, current = current.getParent()) {
+            if (current.isClickable()) return true;
+        }
+        return false;
     }
 
     private boolean clickNodeOrParent(AccessibilityNodeInfo node) {

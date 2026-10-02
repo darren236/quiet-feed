@@ -324,6 +324,22 @@ final class ScreenRules {
         return backOrClose && !selectedFeedTab;
     }
 
+    static boolean instagramMessagesButton(NodeData n, int displayHeight) {
+        boolean navigationPosition = n.top < displayHeight / 3
+                || n.top > displayHeight * 2 / 3;
+        boolean navigationId = n.idContains("direct_tab") || n.idContains("tab_direct")
+                || n.idContains("messages_tab") || n.idContains("tab_messages")
+                || n.idContains("direct_inbox") || n.idContains("action_bar_inbox")
+                || n.idContains("inbox_button");
+        boolean navigationLabel = n.labelIs("messages") || n.labelIs("inbox")
+                || n.labelIs("direct") || n.labelIs("chats")
+                || n.labelContains("messages, ") || n.labelContains("messages tab")
+                || n.labelContains("chats, tab") || n.labelContains("direct, tab")
+                || n.labelContains("inbox, ");
+        return navigationPosition && (navigationId || navigationLabel)
+                && !n.className.contains("edittext");
+    }
+
     private static boolean isLargeVisibleNode(NodeData n, int displayHeight, int displayWidth) {
         int visibleHeight = Math.max(0, Math.min(n.bottom, displayHeight) - Math.max(n.top, 0));
         return visibleHeight >= displayHeight * 3 / 5 && n.width >= displayWidth * 2 / 3;
