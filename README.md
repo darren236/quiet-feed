@@ -10,7 +10,7 @@ The app is built with Android Gradle Plugin 8.12, Gradle 9.3.1, JDK 17 or newer,
 ./build.sh
 ```
 
-The signed APK is named with its version, such as `dist/QuietFeed-1.6.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
+The signed APK is named with its version, such as `dist/QuietFeed-1.7.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
 
 ## Install and enable
 
@@ -21,12 +21,14 @@ If Android shows **Restricted setting** instead of allowing the service, open **
 For a phone connected by USB with debugging enabled, you can also install the APK using:
 
 ```sh
-"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.6.apk
+"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.7.apk
 ```
 
 ## How it works
 
 The service inspects the on-screen interface of Instagram, Facebook, and TikTok on the device. Opening a detected blocked Instagram or Facebook Reel shows a brief centered notice, then sends the user to the phone's Home screen. Reel previews in those feeds remain available. Instagram's DM mode keeps the inbox and chats available and permits a Reel opened directly from a chat until the user scrolls, at which point it returns Home. Other Instagram areas display a way to open messages.
+
+TikTok's **Block videos** option shows a centered notice and returns Home when a video feed or opened video is detected, including chat videos. Inbox and chats remain available.
 
 TikTok's **Chats + shared videos** mode is off by default. When enabled, it covers video feeds with a gate that opens the inbox, keeps chats available, and permits a video opened directly from a chat until the user swipes to another video. That swipe shows the centered notice and returns Home. The TikTok Friends feed is separate from chats and is blocked in this mode. QuietFeed: Shorts Blocker does not check who sent a message or access your TikTok account; it uses the on-screen path from a chat to decide whether a video is allowed.
 

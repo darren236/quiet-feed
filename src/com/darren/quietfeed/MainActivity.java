@@ -332,10 +332,12 @@ public final class MainActivity extends Activity {
         LinearLayout card = card();
         page.addView(card, cardParams(dp(16)));
 
-        addServiceHeading(card, "♪", "TikTok", "Keep chats and videos shared in them.",
+        addServiceHeading(card, "♪", "TikTok", "Choose which videos stay available.",
                 Color.rgb(29, 29, 35));
 
         addTikTokRow(card, "off", "Off", "Use TikTok normally.");
+        addTikTokRow(card, "videos", "Block videos",
+                "Leave TikTok when a video feed or opened video is detected, including videos from chats.");
         addTikTokRow(card, "dm", "Chats + shared videos",
                 "Use the inbox and chats. Watch a video opened directly from a chat until you swipe. The Friends feed is blocked.");
     }

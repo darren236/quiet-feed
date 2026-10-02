@@ -106,6 +106,38 @@ public final class ScreenRulesTest {
         expect("Shared Reel preview stays in chat", ScreenRules.Screen.DM_THREAD,
                 instagram(chat));
 
+        List<ScreenRules.NodeData> chatWithReelControls = nodes(
+                node("Back", "", "", false, 90, 70),
+                node("", "Video call", "", false, 100, 70),
+                wideNode("", "Watch reel by Alex", "clips_media", 500, 1700),
+                node("Original audio", "", "", false, 1300, 60),
+                node("Like", "", "", false, 1400, 60),
+                node("Comment", "", "", false, 1460, 60),
+                node("Send", "", "", false, 1520, 60),
+                node("", "Message...", "thread_composer", false, 2150, 100,
+                        "android.widget.EditText"));
+        expect("Instagram chat with Reel card and controls stays a chat",
+                ScreenRules.Screen.DM_THREAD, instagram(chatWithReelControls));
+
+        List<ScreenRules.NodeData> chatWithEmbeddedViewer = nodes(
+                node("", "Video call", "", false, 100, 70),
+                wideNode("", "", "clips_viewer", 500, 1650),
+                node("", "Message...", "thread_composer", false, 2150, 100,
+                        "android.widget.EditText"));
+        expect("Embedded viewer does not turn Instagram chat into a Reel",
+                ScreenRules.Screen.DM_THREAD, instagram(chatWithEmbeddedViewer));
+
+        List<ScreenRules.NodeData> reelWithReplyAndRail = nodes(
+                node("Back", "", "", false, 90, 70),
+                node("Original audio", "", "", false, 1800, 60),
+                railNode("Like", "", 1300),
+                railNode("Comment", "", 1500),
+                railNode("Share", "", 1700),
+                node("", "Message...", "", false, 2150, 100,
+                        "android.widget.EditText"));
+        expect("Opened Reel with reply field and vertical controls is still blocked",
+                ScreenRules.Screen.REEL, instagram(reelWithReplyAndRail));
+
         List<ScreenRules.NodeData> viewerWithId = nodes(
                 node("Home", "", "", true, 2250, 80),
                 wideNode("", "", "reels_viewer", 0, 2300),

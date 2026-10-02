@@ -323,6 +323,15 @@ public final class ShieldService extends AccessibilityService {
             else hideOverlay();
         } else if (isTikTok(packageName)) {
             ScreenRules.Screen screen = ScreenRules.tiktok(nodes, displayHeight, displayWidth);
+            if ("videos".equals(tiktokMode())) {
+                tiktokSharedVideoActive = false;
+                pendingTikTokOpenUntil = 0;
+                lastTikTokChatAt = 0;
+                lastTikTokScreen = screen;
+                if (screen == ScreenRules.Screen.REEL) exitTarget(packageName);
+                else hideOverlay();
+                return;
+            }
             ScreenRules.Screen previousScreen = lastTikTokScreen;
             lastTikTokScreen = screen;
 
@@ -453,7 +462,8 @@ public final class ShieldService extends AccessibilityService {
         card.setElevation(dp(12));
 
         TextView title = new TextView(this);
-        title.setText(isTikTok(targetPackage) ? "Next video blocked" : "Reel blocked");
+        title.setText(isTikTok(targetPackage) ? ("videos".equals(tiktokMode())
+                ? "TikTok blocked" : "Next video blocked") : "Reel blocked");
         title.setTextColor(0xFFFFFFFF);
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
@@ -534,7 +544,7 @@ public final class ShieldService extends AccessibilityService {
     }
 
     private void collect(AccessibilityNodeInfo node, List<ScreenRules.NodeData> out, int depth) {
-        if (node == null || depth > 35 || out.size() >= 500) return;
+        if (node == null || depth > 35 || out.size() >= 500 || !node.isVisibleToUser()) return;
         out.add(describe(node));
         int children = Math.min(node.getChildCount(), 100);
         for (int i = 0; i < children && out.size() < 500; i++) {

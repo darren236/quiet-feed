@@ -60,6 +60,12 @@ final class ScreenRules {
     static Screen instagram(List<NodeData> nodes, int displayHeight, int displayWidth) {
         boolean messageEntry = false;
         boolean messageHeader = false;
+        boolean threadComposer = false;
+        boolean chatHeader = false;
+        boolean fullScreenViewer = false;
+        int railLikeTop = -1;
+        int railCommentTop = -1;
+        int railShareTop = -1;
         boolean inboxCompanion = false;
         boolean login = false;
         boolean password = false;
@@ -74,7 +80,18 @@ final class ScreenRules {
         boolean share = false;
 
         for (NodeData n : nodes) {
-            if ((n.className.contains("edittext") && (n.hint.contains("message") || n.id.contains("message")))
+            if (n.idContains("message_composer") || n.idContains("thread_composer")
+                    || n.idContains("row_thread_composer")) threadComposer = true;
+            if (n.top < displayHeight / 4 && (n.labelContains("audio call")
+                    || n.labelContains("video call") || n.labelContains("conversation details")
+                    || n.idContains("thread_header"))) chatHeader = true;
+            if (n.left >= displayWidth * 2 / 3 && n.width <= displayWidth / 3
+                    && n.top > displayHeight / 3 && n.bottom < displayHeight * 9 / 10) {
+                if (n.labelContains("like")) railLikeTop = n.top;
+                if (n.labelContains("comment")) railCommentTop = n.top;
+                if (n.labelContains("share") || n.labelIs("send")) railShareTop = n.top;
+            }
+            if ((n.className.contains("edittext") && (n.labelContains("message") || n.id.contains("message")))
                     || n.idContains("message_composer") || n.idContains("thread_composer")) {
                 messageEntry = true;
             }
@@ -98,7 +115,11 @@ final class ScreenRules {
                 if (n.idContains("clips_viewer") || n.idContains("clips_video_container")
                         || n.idContains("reel_pager") || n.idContains("reels_viewer")
                         || n.idContains("reel_viewer") || n.labelContains("reels viewer")
-                        || n.labelContains("reel viewer")) viewerContainer = true;
+                        || n.labelContains("reel viewer")) {
+                    viewerContainer = true;
+                    if (n.top < displayHeight / 6 && n.bottom > displayHeight * 4 / 5)
+                        fullScreenViewer = true;
+                }
                 if (n.idContains("clips_media") || n.idContains("reel_video")
                         || n.labelContains("reel by") || n.labelContains("watch reel")
                         || n.labelContains("reels video")) fullScreenMedia = true;
@@ -115,7 +136,12 @@ final class ScreenRules {
 
         // A shared Reel preview in a chat is not a viewer. A reply field inside a
         // full-screen Reel must not make that viewer look like a conversation.
-        boolean unmarkedViewer = viewerNavigation && like && comment && share
+        boolean actionRail = railLikeTop >= 0
+                && railCommentTop > railLikeTop + displayHeight / 25
+                && railShareTop > railCommentTop + displayHeight / 25;
+        boolean confirmedChat = threadComposer || (messageEntry && chatHeader);
+        if (confirmedChat && !fullScreenViewer && !actionRail) return Screen.DM_THREAD;
+        boolean unmarkedViewer = (!messageEntry || actionRail) && viewerNavigation && like && comment && share
                 && (fullScreenMedia || originalAudio || reelHeading);
         if (messageEntry && !viewerContainer && !reelTabSelected && !unmarkedViewer)
             return Screen.DM_THREAD;
