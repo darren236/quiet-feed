@@ -409,6 +409,70 @@ public final class ScreenRulesTest {
         origin.mediaClick(9100);
         origin.clear();
         expect("Leaving app clears shared video evidence", false, origin.canOpen(9200));
+        List<ScreenRules.NodeData> sparseComments = nodes(
+                node("Add a comment…", "", "", false, 2100, 100));
+        expect("Sparse Instagram comment tree needs shared-Reel context", false,
+                ScreenRules.commentsPanel(sparseComments, DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        expect("Sparse composer identifies comments inside allowed shared Reel", true,
+                ScreenRules.instagramCommentContent(sparseComments, DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        expect("Inline composer cannot start a comment session by itself", false,
+                ScreenRules.instagramCommentPanelEvidence(sparseComments, DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        expect("Narrow comment heading can establish a sheet", true,
+                ScreenRules.instagramCommentPanelEvidence(nodes(new ScreenRules.NodeData("Comments", "", "", "", "",
+                        false, false, 400, 800, 880, 240, 80)), DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        expect("Commenter profile is identifiable outside allowed sheet", true,
+                ScreenRules.instagramProfileScreen(nodes(node("Posts", "", "", false, 400, 80),
+                        node("Followers", "", "", false, 400, 80),
+                        node("Following", "", "", false, 400, 80)), DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        expect("Video rail is not a commenter profile", false,
+                ScreenRules.instagramProfileScreen(countedActions, DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        expect("Right-side comment button cannot keep shared comments open", false,
+                ScreenRules.instagramCommentContent(nodes(railNode("", "Comments", 1500)),
+                        DISPLAY_HEIGHT, DISPLAY_WIDTH));
+        expect("Generic video list cannot keep comments open", false,
+                ScreenRules.instagramCommentContent(nodes(genericList), DISPLAY_HEIGHT, DISPLAY_WIDTH));
+
+        SharedReelComments sharedComments = new SharedReelComments();
+        sharedComments.open(false, 1000);
+        expect("Comment click cannot create a shared-Reel permission", false, sharedComments.isOpen());
+        sharedComments.open(true, 2000);
+        expect("Comment loading snapshot stays allowed", true,
+                sharedComments.allows(ScreenRules.Screen.OTHER, false, true, 2100));
+        expect("Comments survive old transition timeout", true,
+                sharedComments.allows(ScreenRules.Screen.OTHER, false, true, 4000));
+        expect("Reading comments for a long time remains allowed", true,
+                sharedComments.allows(ScreenRules.Screen.OTHER, false, true, 62000));
+        expect("Underlying Reel controls do not block recognized comment content", true,
+                sharedComments.allows(ScreenRules.Screen.REEL, true, true, 63000));
+        sharedComments.requestClose(64000);
+        expect("Back from comments preserves Reel during animation", true,
+                sharedComments.allows(ScreenRules.Screen.OTHER, false, true, 64100));
+        expect("Returning to viewer ends comment context", false,
+                sharedComments.allows(ScreenRules.Screen.REEL, false, true, 65000));
+        expect("Viewer swipe is no longer exempt after closing comments", false, sharedComments.isOpen());
+        sharedComments.open(true, 66000);
+        expect("Comments can reopen for same allowed Reel", true,
+                sharedComments.allows(ScreenRules.Screen.COMMENTS, true, true, 67000));
+        expect("Chat return clears comment context", false,
+                sharedComments.allows(ScreenRules.Screen.DM_THREAD, true, true, 68000));
+        sharedComments.open(true, 69000);
+        expect("Inbox return clears comment context", false,
+                sharedComments.allows(ScreenRules.Screen.DM_INBOX, false, true, 70000));
+        sharedComments.open(true, 71000);
+        expect("Revoked Reel cannot retain comment permission", false,
+                sharedComments.allows(ScreenRules.Screen.OTHER, true, false, 72000));
+        sharedComments.open(true, 73000);
+        sharedComments.clear();
+        expect("Navigation/app switch clears comment permission", false,
+                sharedComments.allows(ScreenRules.Screen.OTHER, false, true, 74000));
+        sharedComments.open(true, 75000);
+        sharedComments.requestClose(76000);
+        expect("Unidentified dismissed sheet has bounded close animation", false,
+                sharedComments.allows(ScreenRules.Screen.OTHER, false, true, 77200));
+        sharedComments.open(true, 80000);
+        sharedComments.requestClose(81000);
+        expect("Inline composer after closing cannot suppress viewer swipe", false,
+                sharedComments.allows(ScreenRules.Screen.REEL, true, true, 81300));
         System.out.println("ScreenRules tests passed: " + assertionCount + " assertions");
     }
 

@@ -58,6 +58,7 @@ public final class ShieldService extends AccessibilityService {
     private String targetPackage = "";
     private ScreenRules.Screen lastInstagramScreen = ScreenRules.Screen.OTHER;
     private final ChatVideoOrigin instagramOrigin = new ChatVideoOrigin();
+    private final SharedReelComments instagramComments = new SharedReelComments();
     private long commentsTransitionUntil;
     private long navigationGraceUntil;
     private boolean dmReelActive;
@@ -89,6 +90,12 @@ public final class ShieldService extends AccessibilityService {
             @Override public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
                 if ("instagram_mode".equals(key) || "facebook_block_reels".equals(key)
                         || "tiktok_mode".equals(key)) {
+                    if ("instagram_mode".equals(key)) {
+                        instagramComments.clear();
+                        instagramOrigin.clear();
+                        dmReelActive = false;
+                        dmReelAllowedAt = 0;
+                    }
                     handler.removeCallbacks(inspection);
                     nextInspectionAt = 0;
                     scheduleInspection(0);
@@ -133,7 +140,11 @@ public final class ShieldService extends AccessibilityService {
         final long now = SystemClock.elapsedRealtime();
         if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_CLICKED) {
             AccessibilityNodeInfo source = event.getSource();
-            if (isCommentOpenClick(event, source)) {
+            boolean commentClick = isCommentOpenClick(event, source);
+            if (commentClick) {
+                if (INSTAGRAM.equals(eventPackage) && "dm".equals(instagramMode())) {
+                    instagramComments.open(dmReelActive, now);
+                }
                 commentsTransitionUntil = now + COMMENTS_TRANSITION_MS;
                 cancelPendingExit();
                 exitSuppressedUntil = 0;
@@ -158,10 +169,17 @@ public final class ShieldService extends AccessibilityService {
                             || eventLabel(event).contains("reel")
                             || eventLabel(event).contains("video")) instagramOrigin.mediaClick(now);
                 }
-                if (isInstagramNavigationClick(event, source)) {
-                    instagramOrigin.navigationClick(now);
-                    dmReelActive = false;
-                    dmReelAllowedAt = 0;
+                if (isInstagramNavigationClick(event, source)
+                        || (instagramComments.isOpen() && isBackOrCloseClick(event, source))) {
+                    if (instagramComments.isOpen() && isBackOrCloseClick(event, source)) {
+                        // Closing a sheet returns to the same allowed shared Reel.
+                        instagramComments.requestClose(now);
+                    } else {
+                        instagramComments.clear();
+                        instagramOrigin.navigationClick(now);
+                        dmReelActive = false;
+                        dmReelAllowedAt = 0;
+                    }
                 }
             } else if (source != null) {
                 if (isTikTok(eventPackage) && "dm".equals(tiktokMode())) {
@@ -178,6 +196,28 @@ public final class ShieldService extends AccessibilityService {
                     }
                 }
             }
+        }
+
+        if (INSTAGRAM.equals(eventPackage) && dmReelActive && instagramComments.isOpen()
+                && event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED
+                && now >= dmReelAllowedAt + DM_SCROLL_ARM_DELAY_MS
+                && currentIsVideoViewer(eventPackage)
+                && isConfirmedInstagramViewerPaging(event)) {
+            instagramComments.clear();
+            commentsTransitionUntil = 0;
+            exitTarget(eventPackage, true);
+            return;
+        }
+
+        if (INSTAGRAM.equals(eventPackage) && instagramComments.isOpen()
+                && currentInstagramCommentsAllowed(now)) {
+            commentsTransitionUntil = 0;
+            cancelPendingExit();
+            exitSuppressedUntil = 0;
+            hideExitNotice();
+            hideOverlay();
+            scheduleInspection(100);
+            return;
         }
 
         if (now < commentsTransitionUntil
@@ -240,6 +280,7 @@ public final class ShieldService extends AccessibilityService {
         targetPackage = "";
         lastInstagramScreen = ScreenRules.Screen.OTHER;
         instagramOrigin.clear();
+        instagramComments.clear();
         navigationGraceUntil = 0;
         commentsTransitionUntil = 0;
         dmReelActive = false;
@@ -278,6 +319,7 @@ public final class ShieldService extends AccessibilityService {
         // A disabled control should not inspect that app's text at all.
         if (INSTAGRAM.equals(packageName) && "off".equals(instagramMode())) {
             instagramOrigin.clear();
+            instagramComments.clear();
             dmReelActive = false;
             hideOverlay();
             return;
@@ -301,6 +343,9 @@ public final class ShieldService extends AccessibilityService {
         int displayWidth = getResources().getDisplayMetrics().widthPixels;
 
         if (ScreenRules.commentsPanel(nodes, displayHeight, displayWidth)) {
+            if (INSTAGRAM.equals(packageName) && "dm".equals(instagramMode())) {
+                instagramComments.open(dmReelActive, now);
+            }
             // Keep any existing shared-video grant while reading or writing comments.
             cancelPendingExit();
             hideExitNotice();
@@ -318,10 +363,28 @@ public final class ShieldService extends AccessibilityService {
         if (INSTAGRAM.equals(packageName)) {
             String mode = instagramMode();
             ScreenRules.Screen screen = ScreenRules.instagram(nodes, displayHeight, displayWidth);
+            boolean commentContent = ScreenRules.instagramCommentContent(nodes, displayHeight, displayWidth);
+            if ("dm".equals(mode) && ScreenRules.instagramCommentPanelEvidence(nodes, displayHeight, displayWidth))
+                instagramComments.open(dmReelActive, now);
+            if (ScreenRules.instagramProfileScreen(nodes, displayHeight, displayWidth)) {
+                instagramComments.clear();
+                instagramOrigin.clear();
+                dmReelActive = false;
+                dmReelAllowedAt = 0;
+            }
+            if ("dm".equals(mode) && instagramComments.allows(screen, commentContent, dmReelActive, now)
+                    && ScreenRules.instagramSharedReelEligible(nodes, displayHeight, true)) {
+                cancelPendingExit();
+                exitSuppressedUntil = 0;
+                hideExitNotice();
+                hideOverlay();
+                return;
+            }
             lastInstagramScreen = screen;
 
             if ("reels".equals(mode)) {
                 instagramOrigin.clear();
+                instagramComments.clear();
                 dmReelActive = false;
                 dmReelAllowedAt = 0;
                 if (screen == ScreenRules.Screen.REEL) exitTarget(packageName);
@@ -339,6 +402,7 @@ public final class ShieldService extends AccessibilityService {
                 hideOverlay();
             } else if (screen == ScreenRules.Screen.REEL) {
                 if (!ScreenRules.instagramSharedReelEligible(nodes, displayHeight, true)) {
+                    instagramComments.clear();
                     dmReelActive = false;
                     dmReelAllowedAt = 0;
                     instagramOrigin.clear();
@@ -479,6 +543,7 @@ public final class ShieldService extends AccessibilityService {
                     return;
                 }
                 if (performGlobalAction(GLOBAL_ACTION_HOME)) {
+                    instagramComments.clear();
                     dmReelActive = false;
                     dmReelAllowedAt = 0;
                     instagramOrigin.clear();
@@ -646,6 +711,9 @@ public final class ShieldService extends AccessibilityService {
         int h = getResources().getDisplayMetrics().heightPixels;
         int w = getResources().getDisplayMetrics().widthPixels;
         if (ScreenRules.commentsPanel(nodes, h, w)) return false;
+        if (INSTAGRAM.equals(pkg) && instagramComments.allows(ScreenRules.instagram(nodes, h, w),
+                ScreenRules.instagramCommentContent(nodes, h, w), dmReelActive,
+                SystemClock.elapsedRealtime())) return false;
         if (FACEBOOK.equals(pkg)) return facebookEnabled() && ScreenRules.facebookReel(nodes, h, w);
         if (INSTAGRAM.equals(pkg)) return !"off".equals(instagramMode())
                 && ScreenRules.instagram(nodes, h, w) == ScreenRules.Screen.REEL
@@ -679,6 +747,36 @@ public final class ShieldService extends AccessibilityService {
     private String eventLabel(AccessibilityEvent event) {
         return (asString(event.getContentDescription()) + " " + event.getText().toString())
                 .toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isBackOrCloseClick(AccessibilityEvent event, AccessibilityNodeInfo source) {
+        for (int i = 0; source != null && i < 3; i++, source = source.getParent()) {
+            ScreenRules.NodeData n = describe(source);
+            if (n.labelIs("back") || n.labelIs("close") || n.labelIs("go back")
+                    || n.idContains("back_button") || n.idContains("close_button")) return true;
+        }
+        String label = eventLabel(event).replace("[", "").replace("]", "").trim();
+        return label.equals("back") || label.equals("close") || label.equals("go back");
+    }
+
+    private boolean currentInstagramCommentsAllowed(long now) {
+        AccessibilityNodeInfo root = findTargetRoot();
+        if (root == null || !INSTAGRAM.equals(asString(root.getPackageName()))) return false;
+        List<ScreenRules.NodeData> nodes = collectScreenNodes(root);
+        int h = getResources().getDisplayMetrics().heightPixels;
+        int w = getResources().getDisplayMetrics().widthPixels;
+        if (!ScreenRules.instagramSharedReelEligible(nodes, h, true)) {
+            instagramComments.clear();
+            return false;
+        }
+        if (ScreenRules.instagramProfileScreen(nodes, h, w)) {
+            instagramComments.clear();
+            instagramOrigin.clear();
+            dmReelActive = false;
+            return false;
+        }
+        return instagramComments.allows(ScreenRules.instagram(nodes, h, w),
+                ScreenRules.instagramCommentContent(nodes, h, w), dmReelActive, now);
     }
 
     private boolean isCommentOpenClick(AccessibilityEvent event, AccessibilityNodeInfo source) {
@@ -743,6 +841,22 @@ public final class ShieldService extends AccessibilityService {
         if (tempBounds.height() < height * 2 / 3 || tempBounds.width() < width * 2 / 3) return false;
         // Some pagers report zero delta even when a new Reel becomes visible.
         return true;
+    }
+
+    private boolean isConfirmedInstagramViewerPaging(AccessibilityEvent event) {
+        if (Build.VERSION.SDK_INT < 28) return false;
+        AccessibilityNodeInfo source = event.getSource();
+        if (source == null || isCommentScrollSource(source)) return false;
+        ScreenRules.NodeData n = describe(source);
+        int h = getResources().getDisplayMetrics().heightPixels;
+        int w = getResources().getDisplayMetrics().widthPixels;
+        boolean pager = n.idContains("clips_viewer") || n.idContains("reel_pager")
+                || n.idContains("reels_viewer") || n.idContains("reel_viewer")
+                || n.className.contains("viewpager");
+        if (!pager || n.width < w * 2 / 3 || n.height < h * 2 / 3) return false;
+        long vertical = Math.abs((long) event.getScrollDeltaY());
+        long horizontal = Math.abs((long) event.getScrollDeltaX());
+        return vertical >= h / 3 && vertical > horizontal;
     }
 
     private boolean isTikTokViewerScroll(AccessibilityEvent event) {
@@ -859,6 +973,7 @@ public final class ShieldService extends AccessibilityService {
     private void openInstagramMessages() {
         hideOverlay();
         instagramOrigin.clear();
+        instagramComments.clear();
         dmReelActive = false;
         navigationGraceUntil = SystemClock.elapsedRealtime() + 2000;
         // Reacquire the app tree after removing our overlay; old nodes can be stale.

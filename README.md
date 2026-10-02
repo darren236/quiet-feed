@@ -18,7 +18,7 @@ The app is built with Android Gradle Plugin 8.12, Gradle 9.3.1, JDK 17 or newer,
 ./build.sh
 ```
 
-The signed APK is named with its version, such as `dist/QuietFeed-1.11.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
+The signed APK is named with its version, such as `dist/QuietFeed-1.12.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
 
 ## Development and checks
 
@@ -41,7 +41,7 @@ If Android shows **Restricted setting** instead of allowing the service, open **
 For a phone connected by USB with debugging enabled, you can also install the APK using:
 
 ```sh
-"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.11.apk
+"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.12.apk
 ```
 
 ## How it works
@@ -54,7 +54,7 @@ TikTok's **Chats + shared videos** mode is off by default. When enabled, it cove
 
 The app does not request internet access or social-media passwords. Social apps can change their interfaces, so a blocked video may appear briefly before detection, and an app update may require new detection rules.
 
-Detected comment panels are allowed in all three apps, including reading, writing, and scrolling comments. Closing comments returns to the underlying screen and its normal blocking rules.
+Detected comment panels are allowed in all three apps, including reading, writing, and scrolling comments. In Instagram DM mode, comments opened from an allowed shared Reel stay attached to that Reel even when Instagram exposes an incomplete comment tree. Closing comments preserves permission for the same shared Reel; navigating elsewhere or paging to another Reel revokes it.
 
 ## Limitations and privacy
 

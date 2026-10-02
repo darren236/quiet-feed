@@ -442,6 +442,80 @@ final class ScreenRules {
                 || (composer && (sorting || replyActions >= 2));
     }
 
+    /**
+     * Sparse Instagram sheets may expose only their composer or comment rows.
+     * Use this only after a comment-open action on an already allowed shared
+     * Reel; these signals alone must not exempt an arbitrary video screen.
+     */
+    static boolean instagramCommentContent(List<NodeData> nodes,
+                                           int displayHeight, int displayWidth) {
+        if (commentsPanel(nodes, displayHeight, displayWidth)
+                || instagramCommentPanelEvidence(nodes, displayHeight, displayWidth)) return true;
+        for (NodeData n : nodes) {
+            boolean videoRail = n.left >= displayWidth * 2 / 3
+                    && n.width <= displayWidth / 3 && n.top > displayHeight / 3;
+            if (videoRail) continue;
+
+            boolean commentComposer = n.labelContains("add a comment")
+                    || n.labelContains("write a comment") || n.labelContains("leave a comment")
+                    || n.labelContains("add comment") || n.labelContains("write comment")
+                    || (n.className.contains("edittext") && n.labelContains("comment"));
+            if (commentComposer) return true;
+        }
+        return false;
+    }
+
+    /** Panel evidence that does not depend on a prior comment-open action. */
+    static boolean instagramCommentPanelEvidence(List<NodeData> nodes,
+                                                 int displayHeight, int displayWidth) {
+        int replyActions = 0;
+        for (NodeData n : nodes) {
+            boolean videoRail = n.left >= displayWidth * 2 / 3
+                    && n.width <= displayWidth / 3 && n.top > displayHeight / 3;
+            if (videoRail) continue;
+            boolean explicitContent = n.idContains("comment_list") || n.idContains("comments_list")
+                    || n.idContains("comment_recycler") || n.idContains("comments_recycler")
+                    || n.idContains("comments_sheet") || n.idContains("comment_sheet")
+                    || n.idContains("comments_bottom_sheet") || n.idContains("comment_bottom_sheet")
+                    || n.idContains("comments_dialog") || n.idContains("comment_dialog")
+                    || n.idContains("comments_panel") || n.idContains("comment_panel");
+            if (explicitContent && n.width >= displayWidth / 3
+                    && n.height >= displayHeight / 8) return true;
+
+            boolean commentHeading = n.labelIs("comments")
+                    || n.labelMatches("[0-9.,km ]+ comments")
+                    || n.labelMatches("comments[ ,:]*\\(?[0-9.,km ]+\\)?")
+                    || n.idContains("comments_title") || n.idContains("comment_header");
+            if (commentHeading && n.height <= displayHeight / 5
+                    && n.top < displayHeight * 9 / 10) return true;
+
+            if (n.labelIs("reply") && n.top > displayHeight / 5) replyActions++;
+        }
+        return replyActions >= 2;
+    }
+
+    /** Strong profile evidence used to end a shared-Reel comment session. */
+    static boolean instagramProfileScreen(List<NodeData> nodes,
+                                          int displayHeight, int displayWidth) {
+        boolean posts = false;
+        boolean followers = false;
+        boolean following = false;
+        for (NodeData n : nodes) {
+            boolean profileGrid = n.idContains("profile_grid") || n.idContains("profile_posts_grid")
+                    || n.idContains("profile_media_grid") || n.idContains("profile_recycler_view");
+            if (profileGrid && n.width >= displayWidth * 2 / 3
+                    && n.height >= displayHeight / 5) return true;
+            if (n.top >= displayHeight * 3 / 5) continue;
+            if (n.labelIs("posts") || n.labelMatches("[0-9.,km ]+ posts")
+                    || n.labelMatches("posts[ ,:]+[0-9.,km ]+")) posts = true;
+            if (n.labelIs("followers") || n.labelMatches("[0-9.,km ]+ followers")
+                    || n.labelMatches("followers[ ,:]+[0-9.,km ]+")) followers = true;
+            if (n.labelIs("following") || n.labelMatches("[0-9.,km ]+ following")
+                    || n.labelMatches("following[ ,:]+[0-9.,km ]+")) following = true;
+        }
+        return posts && followers && following;
+    }
+
     static boolean instagramMessagesButton(NodeData n, int displayHeight) {
         boolean navigationPosition = n.top < displayHeight / 3
                 || n.top > displayHeight * 2 / 3;
