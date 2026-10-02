@@ -2,6 +2,14 @@
 
 QuietFeed: Shorts Blocker is an Android app that uses an Accessibility Service to detect Instagram, Facebook, and TikTok screens and enforce the short-video controls selected in the app. Its minimum supported version is Android 6.0 (API 23).
 
+## Project layout and version control
+
+This folder is the single Git checkout for [darren236/quiet-feed](https://github.com/darren236/quiet-feed). The authoritative source files are `src/`, `res/`, and `AndroidManifest.xml` at the project root. `gradle-app/` contains the build configuration and points to those same files; it is not a second app copy.
+
+Use `dist/QuietFeed-<version>.apk` for installation. Gradle also produces an identical intermediate APK under `gradle-app/app/build/outputs/apk/release/`. Build outputs and local signing files are ignored by Git. Do not commit signing keys or passwords.
+
+Commit source changes to Git and use a new `versionName` and higher `versionCode` for each APK release. Published releases use Git tags such as `v1.7` and store APKs in GitHub Releases. Keep published tags and assets unchanged; publish a new version for later app changes. Use Git history and release tags to recover earlier versions instead of keeping numbered project copies.
+
 ## Build the APK
 
 The app is built with Android Gradle Plugin 8.12, Gradle 9.3.1, JDK 17 or newer, Android SDK Platform 36, and OpenSSL for first-time signing setup. The Gradle wrapper downloads Gradle and its dependencies if they are not already installed. On macOS with Homebrew, the script finds the JDK and SDK automatically. On another machine, set `JAVA_HOME` and `ANDROID_HOME` first.
