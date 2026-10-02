@@ -1,0 +1,41 @@
+name: Bug report
+description: Report an incorrect block, missed block, or setup problem.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the README and latest release first. For security issues, use SECURITY.md to report privately. Remove personal content from any screenshots or UI dumps.
+  - type: input
+    id: quietfeed-version
+    attributes:
+      label: QuietFeed version
+      placeholder: "For example: 1.14"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Phone and app details
+      description: Phone model, Android version, social app and its version, interface language, and selected QuietFeed mode.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Describe the starting screen and the taps or swipes that trigger the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Explain what should happen and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Optional evidence
+      description: Add a minimal invented fixture or a redacted screenshot. Remove usernames, messages, notifications, banking details, and account information.

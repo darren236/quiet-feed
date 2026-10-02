@@ -4,11 +4,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/opt/homebrew/share/android-commandlinetools}}"
 JDK="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home}"
+AAPT="$SDK/build-tools/36.0.0/aapt"
 KEYSTORE="$ROOT/build/quietfeed.keystore"
 SIGNING_FILE="$ROOT/build/signing.properties"
 
 if [[ ! -f "$SDK/platforms/android-36/android.jar" ]]; then
     echo 'Android SDK Platform 36 is required. Set ANDROID_HOME to its SDK directory.' >&2
+    exit 1
+fi
+if [[ ! -x "$AAPT" ]]; then
+    echo 'Android SDK Build Tools 36.0.0 is required. Install it with sdkmanager "build-tools;36.0.0" in the SDK set by ANDROID_HOME.' >&2
     exit 1
 fi
 if [[ ! -x "$JDK/bin/keytool" ]]; then
@@ -54,7 +59,7 @@ export JAVA_HOME="$JDK"
 "$ROOT/gradle-app/gradlew" -p "$ROOT/gradle-app" --no-daemon :app:assembleRelease
 
 BUILT_APK="$ROOT/gradle-app/app/build/outputs/apk/release/app-release.apk"
-VERSION_NAME="$("$SDK/build-tools/36.0.0/aapt" dump badging "$BUILT_APK" \
+VERSION_NAME="$("$AAPT" dump badging "$BUILT_APK" \
     | sed -n "1s/.*versionName='\([^']*\)'.*/\1/p")"
 if [[ -z "$VERSION_NAME" ]]; then
     echo 'Could not read the built APK version.' >&2

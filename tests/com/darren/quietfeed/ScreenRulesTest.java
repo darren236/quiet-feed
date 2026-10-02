@@ -251,6 +251,48 @@ public final class ScreenRulesTest {
         expect("TikTok profile is outside messages", ScreenRules.Screen.OTHER,
                 tiktok(tiktokProfile));
 
+        ScreenRules.NodeData recyclerVideoPager = new ScreenRules.NodeData("", "", "", "video_pager",
+                "androidx.recyclerview.widget.RecyclerView", false, false, 0, 2300, 1080, 2300);
+        expect("TikTok RecyclerView video pager reports next video even with zero delta", true,
+                ScreenRules.tiktokViewerScroll(recyclerVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        false, 0, 0));
+        ScreenRules.NodeData listFeedPager = new ScreenRules.NodeData("", "", "", "feed_pager",
+                "android.widget.ListView", false, false, 0, 2300, 1080, 2300);
+        expect("TikTok known feed pager overrides generic list exclusion", true,
+                ScreenRules.tiktokViewerScroll(listFeedPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 2400, 0));
+        ScreenRules.NodeData commentsList = new ScreenRules.NodeData("", "", "", "comments_list",
+                "androidx.recyclerview.widget.RecyclerView", false, false, 0, 2300, 1080, 2300);
+        expect("TikTok large comment list scroll remains allowed", false,
+                ScreenRules.tiktokViewerScroll(commentsList, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 2400, 0));
+        ScreenRules.NodeData namedCommentsPager = new ScreenRules.NodeData("", "Comments", "", "video_pager",
+                "androidx.recyclerview.widget.RecyclerView", false, false, 0, 2300, 1080, 2300);
+        expect("TikTok comment label overrides known pager ID", false,
+                ScreenRules.tiktokViewerScroll(namedCommentsPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 2400, 0));
+        ScreenRules.NodeData unnamedList = new ScreenRules.NodeData("", "", "", "",
+                "androidx.recyclerview.widget.RecyclerView", false, false, 0, 2300, 1080, 2300);
+        expect("TikTok unknown comment or message list cannot count as next video", false,
+                ScreenRules.tiktokViewerScroll(unnamedList, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 2400, 0));
+        ScreenRules.NodeData smallVideoPager = new ScreenRules.NodeData("", "", "", "video_pager",
+                "androidx.recyclerview.widget.RecyclerView", false, false, 800, 1400, 1080, 600);
+        expect("TikTok embedded video pager cannot count as full-screen video paging", false,
+                ScreenRules.tiktokViewerScroll(smallVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 2400, 0));
+        ScreenRules.NodeData unmarkedVideoContainer = new ScreenRules.NodeData("", "", "", "",
+                "android.widget.FrameLayout", false, false, 0, 2300, 1080, 2300);
+        expect("TikTok unmarked viewer needs a substantial vertical scroll", true,
+                ScreenRules.tiktokViewerScroll(unmarkedVideoContainer, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, -900, 0));
+        expect("TikTok horizontal viewer scroll is not the next video", false,
+                ScreenRules.tiktokViewerScroll(unmarkedVideoContainer, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 900, 1100));
+        expect("TikTok unmarked viewer without delta cannot confirm video paging", false,
+                ScreenRules.tiktokViewerScroll(unmarkedVideoContainer, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        false, 0, 0));
+
         expect("Instagram bottom DM tab", true, ScreenRules.instagramMessagesButton(
                 node("", "Messages, 2 unread, tab", "", false, 2250, 80), DISPLAY_HEIGHT));
         expect("Instagram top Messages icon", true, ScreenRules.instagramMessagesButton(

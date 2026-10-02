@@ -395,6 +395,24 @@ final class ScreenRules {
         return backOrClose && !selectedFeedTab;
     }
 
+    /** Recognizes video paging without treating comment-list scrolling as the next video. */
+    static boolean tiktokViewerScroll(NodeData source, int displayHeight, int displayWidth,
+                                      boolean hasScrollDelta, int deltaY, int deltaX) {
+        if (source == null || source.idContains("comment") || source.labelContains("comments"))
+            return false;
+        if (source.width < displayWidth * 2 / 3 || source.height < displayHeight * 3 / 5)
+            return false;
+        // A known video pager may be implemented as a RecyclerView or another list.
+        if (source.idContains("video_pager") || source.idContains("feed_pager")) return true;
+        if (source.className.contains("scrollview") || source.className.contains("recyclerview")
+                || source.className.contains("listview")) return false;
+        if (source.className.contains("viewpager")) return true;
+        if (!hasScrollDelta) return false;
+        long vertical = Math.abs((long) deltaY);
+        long horizontal = Math.abs((long) deltaX);
+        return vertical >= displayHeight / 3 && vertical > horizontal;
+    }
+
     static boolean commentsPanel(List<NodeData> nodes, int displayHeight, int displayWidth) {
         boolean heading = false;
         boolean composer = false;

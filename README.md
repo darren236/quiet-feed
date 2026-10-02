@@ -1,79 +1,121 @@
 # QuietFeed: Shorts Blocker
 
-QuietFeed: Shorts Blocker is an Android app that uses an Accessibility Service to detect Instagram, Facebook, and TikTok screens and enforce the short-video controls selected in the app. Its minimum supported version is Android 6.0 (API 23).
+Keep the conversations. Skip the scroll.
 
-## Project layout and version control
+QuietFeed is a small, native Android app that blocks opened short-video viewers in Instagram, Facebook, and TikTok. Optional messages-only modes keep chats and videos opened from chats available. It runs locally through Android's Accessibility Service, with no account login or internet permission.
 
-This folder is the single Git checkout for [darren236/quiet-feed](https://github.com/darren236/quiet-feed). The authoritative source files are `src/`, `res/`, and `AndroidManifest.xml` at the project root. `gradle-app/` contains the build configuration and points to those same files; it is not a second app copy.
+[![Android checks](https://github.com/darren236/quiet-feed/actions/workflows/android.yml/badge.svg)](https://github.com/darren236/quiet-feed/actions/workflows/android.yml)
+[![Latest release](https://img.shields.io/github/v/release/darren236/quiet-feed)](https://github.com/darren236/quiet-feed/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Use `dist/QuietFeed-<version>.apk` for installation. Gradle also produces an identical intermediate APK under `gradle-app/app/build/outputs/apk/release/`. Build outputs and local signing files are ignored by Git. Do not commit signing keys or passwords.
+**[Download QuietFeed 1.14 APK](https://github.com/darren236/quiet-feed/releases/download/v1.14/QuietFeed-1.14.apk)** · [Release notes](CHANGELOG.md)
 
-Commit source changes to Git and use a new `versionName` and higher `versionCode` for each APK release. Published releases use Git tags such as `v1.7` and store APKs in GitHub Releases. Keep published tags and assets unchanged; publish a new version for later app changes. Use Git history and release tags to recover earlier versions instead of keeping numbered project copies.
+Requires **Android 6.0 or newer (API 23)**; targets **Android 16 (API 36)**. Detection currently uses English interface labels.
 
-## Build the APK
+## Screenshots
 
-The app is built with Android Gradle Plugin 8.12, Gradle 9.3.1, JDK 17 or newer, Android SDK Platform 36, and OpenSSL for first-time signing setup. The Gradle wrapper downloads Gradle and its dependencies if they are not already installed. On macOS with Homebrew, the script finds the JDK and SDK automatically. On another machine, set `JAVA_HOME` and `ANDROID_HOME` first.
+<table>
+  <tr>
+    <td><img src="docs/screenshots/01-settings.png" width="280" alt="QuietFeed settings screen with accessibility status and Instagram controls"><br><strong>Settings and Instagram controls</strong></td>
+    <td><img src="docs/screenshots/02-video-controls.png" width="280" alt="QuietFeed Facebook and TikTok video blocking settings"><br><strong>Facebook and TikTok controls</strong></td>
+    <td><img src="docs/screenshots/03-banking-shortcut.png" width="280" alt="QuietFeed instructions for a Samsung accessibility shortcut before using banking apps"><br><strong>Banking shortcut guide</strong></td>
+  </tr>
+</table>
+
+Actual QuietFeed 1.14 screens captured on an Android 14 emulator. These show the app's settings, not live social-app detection or a Samsung settings screen.
+
+## Controls
+
+| App | Options | What stays available |
+| --- | --- | --- |
+| Instagram | Off · Block Reels · DMs + shared Reels | Block Reels allows Home feed previews. DM mode allows the inbox, chats, and a Reel opened from a chat until the first video swipe. |
+| Facebook | Off · Block Reels | Feed previews remain visible; detected opened Reels send you Home. |
+| TikTok | Off · Block videos · Chats + shared videos | Chat mode allows the inbox, chats, and a video opened from a chat until the first video swipe. The Friends feed is blocked. Block videos also blocks opened chat videos. |
+
+- Detected comment panels remain available for reading, writing, and scrolling. Closing comments preserves the same allowed shared video.
+- A detected blocked viewer shows a brief centered notice before sending you to the phone's Home screen. This does not force-stop the social app.
+- Messages-only gates include **Open messages** to select a detected Instagram Messages tab or TikTok inbox.
+- Defaults: Instagram **Block Reels**, Facebook blocking **On**, TikTok **Off**.
+
+Shared-video modes recognize the path from a chat into a video. **They do not verify that the sender is a friend.**
+
+## Install and enable
+
+1. Download the APK from [GitHub Releases](https://github.com/darren236/quiet-feed/releases/latest), open it on your phone, and allow installation from that source when Android asks.
+2. Open QuietFeed and choose your app modes.
+3. Tap **Open Accessibility settings**, then enable **Installed apps → QuietFeed: Shorts Blocker screen filter**. You must grant this access manually.
+
+If Android shows **Restricted setting**, open **Settings → Apps → QuietFeed: Shorts Blocker → More (⋮) → Allow restricted settings**, then return to Accessibility. This can be required for sideloaded apps on Android 13 and newer. Menu names vary by device. See [Android's restricted-settings instructions](https://support.google.com/android/answer/12623953).
+
+For a USB-connected phone with debugging enabled and `adb` on your path:
+
+```sh
+adb install -r dist/QuietFeed-1.14.apk
+```
+
+## Samsung shortcut for banking apps
+
+Some banking apps require accessibility services to be disabled. Set up a hardware shortcut to reach QuietFeed's switch quickly:
+
+1. Open **Settings → Accessibility → Accessibility shortcuts → Side and Volume up buttons**. Select **Accessibility** to open its settings. Some One UI versions call the shortcut menu **Advanced settings**. See [Samsung's shortcut guide](https://www.samsung.com/us/support/answer/ANS10001906/) and [older menu instructions](https://www.samsung.com/ca/support/mobile-devices/set-up-the-side-button-or-bixby-key-on-your-galaxy-phone/).
+2. Before banking, press **Side/Power + Volume up** together. If a chooser appears, select **Accessibility**.
+3. Open **Installed apps → QuietFeed: Shorts Blocker screen filter** and turn the service **Off**. Then open your banking app.
+4. After banking, use the same shortcut and turn the service **On** again.
+
+If QuietFeed itself is offered as a shortcut action, selecting it may let the buttons toggle the service directly. Confirm that the service is **Off** before banking; shortcut actions vary by phone and software version.
+
+**Setting app modes to Off does not disable the accessibility service.** Protection stops while the service is disabled; your selected modes remain saved. QuietFeed does not bypass a bank's accessibility checks.
+
+## Privacy and limitations
+
+Android's accessibility permission can expose window contents. QuietFeed receives accessibility events to track foreground windows and system overlays, then collects visible UI nodes from supported social apps for local classification. It does not store message contents, capture screenshots, send analytics, request social-media passwords, or request internet permission. Only your app-mode preferences are saved locally.
+
+Detection uses English accessibility labels, view IDs, and screen geometry. Other languages, interface experiments, and social-app updates can cause missed blocks or false blocks. A blocked video may appear briefly before detection. Unknown screens can remain unrecognized in blocking mode or show the messages gate in messages-only mode. Shared-video origin and comment transitions are inferred from the interface; ambiguous navigation can affect that allowance.
+
+This is a personal focus tool, not a tamper-resistant parental-control system. You can change modes, disable the service, or uninstall the app. There is no affiliation with Instagram, Facebook, TikTok, or their owners.
+
+## Build and development
+
+### Requirements
+
+- **JDK 17**, Android SDK **Platform 36**, **Build Tools 36.0.0**, and Platform Tools.
+- The included wrapper uses **Gradle 9.3.1** with **Android Gradle Plugin 8.12.0**.
+- **OpenSSL** for the release script's first-time signing setup.
+- Set `JAVA_HOME` and `ANDROID_HOME` to your installations. The release script also recognizes the usual Homebrew paths on macOS.
+
+Install the Android SDK components with Android Studio's SDK Manager or the command-line tools:
+
+```sh
+sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
+```
+
+Accept the SDK licenses when prompted. Gradle downloads dependencies on the first build.
+
+Open `gradle-app/` in Android Studio, or run:
+
+```sh
+./gradle-app/gradlew -p gradle-app --no-daemon :app:check :app:assembleDebug
+```
+
+Debug builds and checks do not require release signing files. The `screenRulesTest` task runs plain Java fixtures for screen classification, shared-video eligibility, and comment transitions. It is included in `check`, unit-test tasks, and release builds. GitHub Actions runs checks and a debug build on pushes and pull requests without release secrets. These fixtures do not replace device testing of real app layouts, event timing, overlays, or navigation; see the [device checklist](CONTRIBUTING.md#device-checklist).
+
+### Signed release APK
 
 ```sh
 ./build.sh
 ```
 
-The signed APK is named with its version, such as `dist/QuietFeed-1.13.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
+The result is `dist/QuietFeed-1.14.apk`. On a fresh checkout, the script creates `build/quietfeed.keystore` and a random password in `build/signing.properties`; both are ignored by Git. Back them up securely and reuse them for your own subsequent releases. A locally generated key differs from the official release key, so that build cannot update an official APK in place. A direct Gradle release build is unsigned when local signing files are absent.
 
-## Development and checks
+### Code structure
 
-Open `gradle-app/` in Android Studio. Debug builds and tests do not require private release signing files:
+`MainActivity` provides native settings. `ShieldService` handles accessibility events, windows, gates, and Home actions. The plain Java `ScreenRules`, `ChatVideoOrigin`, and `SharedReelComments` helpers classify screens and track temporary shared-video permissions.
 
-```sh
-./gradle-app/gradlew -p gradle-app :app:check :app:assembleDebug
-```
+This is one Git checkout. `src/`, `res/`, and `AndroidManifest.xml` are the app source; `gradle-app/` points to those files and is not another app copy. `dist/` contains the installable APK, while Gradle's APK output is an intermediate build artifact. Generated outputs and signing files are ignored. Published versions use Git tags and GitHub Releases; preserve existing releases and publish a new version for later changes.
 
-The `screenRulesTest` task runs the plain Java regression suite. It is included in `check`, the unit-test tasks, and every release build. GitHub Actions runs the checks and a debug build on pushes and pull requests without release secrets. A release built directly with Gradle is unsigned when local signing files are absent; use `./build.sh` to prepare signing and produce an installable release APK.
+## Contributing and security
 
-The tests use synthetic accessibility-node fixtures. They cover screen classification and shared-Reel eligibility, but do not substitute for testing event timing, overlays, and navigation on a phone. Before releasing, check each supported app's feed previews, opened videos, inbox, chat previews, shared videos, comments, comment scrolling, and the first swipe after closing comments.
-
-## Install and enable
-
-Copy the versioned APK to your Android phone, open it, and allow installation from that source when Android asks. The app shows its installed version under the QuietFeed: Shorts Blocker name. Open QuietFeed: Shorts Blocker and follow its link to **Settings → Accessibility → Installed apps → QuietFeed: Shorts Blocker screen filter** to enable the service. Android requires you to enable this access manually.
-
-If Android shows **Restricted setting** instead of allowing the service, open **Settings → Apps → QuietFeed: Shorts Blocker → More (⋮) → Allow restricted settings**, then return to Accessibility. This step can be required for sideloaded accessibility apps on Android 13 and newer ([Android Help](https://support.google.com/android/answer/12623953)).
-
-For a phone connected by USB with debugging enabled, you can also install the APK using:
-
-```sh
-"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.13.apk
-```
-
-## Samsung shortcut for banking apps
-
-If a banking app requires accessibility services to be disabled, use a hardware shortcut to reach QuietFeed's service switch quickly:
-
-1. Open **Settings → Accessibility → Accessibility shortcuts → Side and Volume up buttons**. Select **Accessibility** to open its settings. Some One UI versions call the shortcut menu **Advanced settings**. See [Samsung's shortcut guide](https://www.samsung.com/us/support/answer/ANS10001906/) and [older menu instructions](https://www.samsung.com/ca/support/mobile-devices/set-up-the-side-button-or-bixby-key-on-your-galaxy-phone/).
-2. Before opening the banking app, press **Side/Power + Volume up** together. If a shortcut chooser appears, select **Accessibility**.
-3. Open **Installed apps → QuietFeed: Shorts Blocker screen filter** and turn the service **Off**. Then open the banking app.
-4. After banking, use the same shortcut and turn the service **On** again.
-
-If your phone offers QuietFeed itself as a shortcut action, selecting it may let the buttons toggle the service directly. Check that the service is **Off** before banking. Available actions and menu names vary by phone and software version.
-
-Turning QuietFeed's app modes **Off** does not disable its accessibility service. Blocking stops while the service is disabled; your saved app settings remain.
-
-## How it works
-
-The service inspects the on-screen interface of Instagram, Facebook, and TikTok on the device. Opening a detected blocked Instagram or Facebook Reel shows a brief centered notice, then sends the user to the phone's Home screen. Reel previews in those feeds remain available. Instagram's DM mode keeps the inbox and chats available and permits a Reel opened directly from a chat until the user scrolls, at which point it returns Home. Other Instagram areas display an Open messages button that selects a detected top Messages icon or bottom DM tab.
-
-TikTok's **Block videos** option shows a centered notice and returns Home when a video feed or opened video is detected, including chat videos. Inbox and chats remain available.
-
-TikTok's **Chats + shared videos** mode is off by default. When enabled, it covers video feeds with a gate that opens the inbox, keeps chats available, and permits a video opened directly from a chat until the user swipes to another video. That swipe shows the centered notice and returns Home. The TikTok Friends feed is separate from chats and is blocked in this mode. QuietFeed: Shorts Blocker does not check who sent a message or access your TikTok account; it uses the on-screen path from a chat to decide whether a video is allowed.
-
-The app does not request internet access or social-media passwords. Social apps can change their interfaces, so a blocked video may appear briefly before detection, and an app update may require new detection rules.
-
-Detected comment panels are allowed in all three apps, including reading, writing, and scrolling comments. In Instagram DM mode, comments opened from an allowed shared Reel stay attached to that Reel even when Instagram exposes an incomplete comment tree. Closing comments preserves permission for the same shared Reel; navigating elsewhere or paging to another Reel revokes it.
-
-## Limitations and privacy
-
-Detection currently relies on English accessibility labels, view identifiers, and screen geometry. Other languages, interface experiments, and app updates can change the results. Shared-video modes use the on-screen path from a chat; they do not verify the sender's identity or friendship status. Instagram accepts a recent chat media tap or a brief transition from a confirmed chat into an opened viewer with Back/Close controls. This handles missing click events. Feed tabs and detected unrelated navigation revoke that allowance, but ambiguous navigation can still cause missed blocks or false blocks.
-
-Accessibility access lets the service inspect window contents. QuietFeed processes supported apps' visible UI locally and does not store message contents, send analytics, or request internet permission. Some banking apps reject enabled accessibility services; disable QuietFeed's service in Android settings when required.
+Detection fixes and reproducible bug reports are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks and safe screen fixtures, and [SECURITY.md](SECURITY.md) for reporting vulnerabilities privately.
 
 ## License
 

@@ -862,22 +862,12 @@ public final class ShieldService extends AccessibilityService {
     private boolean isTikTokViewerScroll(AccessibilityEvent event) {
         AccessibilityNodeInfo source = event.getSource();
         if (source == null || isCommentScrollSource(source)) return false;
-        ScreenRules.NodeData sourceData = describe(source);
-        if (sourceData.idContains("comment") || sourceData.labelContains("comments")
-                || sourceData.className.contains("scrollview")
-                || sourceData.className.contains("recyclerview")
-                || sourceData.className.contains("listview")) return false;
-        source.getBoundsInScreen(tempBounds);
         int height = getResources().getDisplayMetrics().heightPixels;
         int width = getResources().getDisplayMetrics().widthPixels;
-        if (tempBounds.width() < width * 2 / 3
-                || tempBounds.height() < height * 3 / 5) return false;
-        if (sourceData.idContains("video_pager") || sourceData.idContains("feed_pager")
-                || sourceData.className.contains("viewpager")) return true;
-        if (Build.VERSION.SDK_INT < 28) return false;
-        long vertical = Math.abs((long) event.getScrollDeltaY());
-        long horizontal = Math.abs((long) event.getScrollDeltaX());
-        return vertical >= height / 3 && vertical > horizontal;
+        boolean hasScrollDelta = Build.VERSION.SDK_INT >= 28;
+        return ScreenRules.tiktokViewerScroll(describe(source), height, width, hasScrollDelta,
+                hasScrollDelta ? event.getScrollDeltaY() : 0,
+                hasScrollDelta ? event.getScrollDeltaX() : 0);
     }
 
     private void showDmGate(String packageName) {

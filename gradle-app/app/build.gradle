@@ -10,13 +10,14 @@ def hasReleaseSigning = signingPassword && signingPassword ==~ /[A-Za-z0-9]+/ &&
 android {
     namespace 'com.darren.quietfeed'
     compileSdk 36
+    buildToolsVersion '36.0.0'
 
     defaultConfig {
         applicationId 'com.darren.quietfeed'
         minSdk 23
         targetSdk 36
-        versionCode 14
-        versionName '1.13'
+        versionCode 15
+        versionName '1.14'
     }
 
     sourceSets {
