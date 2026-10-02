@@ -18,7 +18,7 @@ The app is built with Android Gradle Plugin 8.12, Gradle 9.3.1, JDK 17 or newer,
 ./build.sh
 ```
 
-The signed APK is named with its version, such as `dist/QuietFeed-1.12.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
+The signed APK is named with its version, such as `dist/QuietFeed-1.13.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
 
 ## Development and checks
 
@@ -41,8 +41,21 @@ If Android shows **Restricted setting** instead of allowing the service, open **
 For a phone connected by USB with debugging enabled, you can also install the APK using:
 
 ```sh
-"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.12.apk
+"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.13.apk
 ```
+
+## Samsung shortcut for banking apps
+
+If a banking app requires accessibility services to be disabled, use a hardware shortcut to reach QuietFeed's service switch quickly:
+
+1. Open **Settings → Accessibility → Accessibility shortcuts → Side and Volume up buttons**. Select **Accessibility** to open its settings. Some One UI versions call the shortcut menu **Advanced settings**. See [Samsung's shortcut guide](https://www.samsung.com/us/support/answer/ANS10001906/) and [older menu instructions](https://www.samsung.com/ca/support/mobile-devices/set-up-the-side-button-or-bixby-key-on-your-galaxy-phone/).
+2. Before opening the banking app, press **Side/Power + Volume up** together. If a shortcut chooser appears, select **Accessibility**.
+3. Open **Installed apps → QuietFeed: Shorts Blocker screen filter** and turn the service **Off**. Then open the banking app.
+4. After banking, use the same shortcut and turn the service **On** again.
+
+If your phone offers QuietFeed itself as a shortcut action, selecting it may let the buttons toggle the service directly. Check that the service is **Off** before banking. Available actions and menu names vary by phone and software version.
+
+Turning QuietFeed's app modes **Off** does not disable its accessibility service. Blocking stops while the service is disabled; your saved app settings remain.
 
 ## How it works
 

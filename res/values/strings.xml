@@ -3,4 +3,7 @@
     <string name="app_name">QuietFeed: Shorts Blocker</string>
     <string name="accessibility_service_name">QuietFeed: Shorts Blocker screen filter</string>
     <string name="accessibility_service_description">Limits Instagram, Facebook, and TikTok short videos. TikTok can allow videos opened from chats while blocking its video feeds.</string>
+    <string name="banking_shortcut_title">Banking apps: Samsung quick pause</string>
+    <string name="banking_shortcut_guide">If your bank asks you to disable accessibility, use this shortcut to pause QuietFeed.\n\nSet up once\n1. Open Settings → Accessibility → Accessibility shortcuts (or Advanced settings).\n2. Choose Side and Volume up buttons, then select Accessibility.\n\nBefore banking\nPress Side/Power + Volume Up together. Choose Accessibility if a menu appears. Open Installed apps → QuietFeed: Shorts Blocker screen filter and turn it Off.\n\nAfter banking\nUse the shortcut again and turn the same service On. Your app choices stay saved; blocking pauses while the service is off.\n\nThe Off choices inside QuietFeed do not disable its accessibility access. Menu names vary by phone.</string>
+    <string name="banking_shortcut_settings">Open Accessibility settings</string>
 </resources>

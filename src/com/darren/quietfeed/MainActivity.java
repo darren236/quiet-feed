@@ -107,6 +107,7 @@ public final class MainActivity extends Activity {
         addInstagramCard(page);
         addFacebookCard(page);
         addTikTokCard(page);
+        addBankingShortcutCard(page);
         addExplanationCard(page);
         updateInstagramSelection();
         updateTikTokSelection();
@@ -399,6 +400,33 @@ public final class MainActivity extends Activity {
             item.container.setBackground(round(
                     selected ? ACCENT_PALE : CARD, 12, selected ? ACCENT : BORDER));
         }
+    }
+
+    private void addBankingShortcutCard(LinearLayout page) {
+        LinearLayout card = card();
+        page.addView(card, cardParams(dp(16)));
+        card.addView(text(getString(R.string.banking_shortcut_title), 16, INK, true));
+
+        TextView guide = text(getString(R.string.banking_shortcut_guide), 13, MUTED, false);
+        guide.setLineSpacing(dp(3), 1f);
+        LinearLayout.LayoutParams guideParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        guideParams.topMargin = dp(10);
+        card.addView(guide, guideParams);
+
+        TextView settings = text(getString(R.string.banking_shortcut_settings), 14, Color.WHITE, true);
+        settings.setGravity(Gravity.CENTER);
+        settings.setPadding(dp(18), dp(12), dp(18), dp(12));
+        settings.setBackground(round(ACCENT, 12, ACCENT));
+        settings.setClickable(true);
+        settings.setFocusable(true);
+        settings.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { openAccessibilitySettings(); }
+        });
+        LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        settingsParams.topMargin = dp(16);
+        card.addView(settings, settingsParams);
     }
 
     private void addExplanationCard(LinearLayout page) {
