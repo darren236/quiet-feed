@@ -6,6 +6,7 @@ import java.util.List;
 public final class ScreenRulesTest {
     private static final int DISPLAY_HEIGHT = 2400;
     private static final int DISPLAY_WIDTH = 1080;
+    private static int assertionCount;
 
     public static void main(String[] args) {
         List<ScreenRules.NodeData> instagramFeed = nodes(
@@ -331,7 +332,84 @@ public final class ScreenRulesTest {
             expect("TikTok counted comments label field " + labelField, ScreenRules.Screen.COMMENTS,
                     tiktok(describedComments));
         }
-        System.out.println("ScreenRules tests passed");
+        expect("Username inbox with search and compose", ScreenRules.Screen.DM_INBOX,
+                instagram(nodes(node("darren236", "", "", false, 100, 80),
+                        node("Search", "", "", false, 300, 100, "android.widget.EditText"),
+                        node("", "New message", "", false, 100, 80))));
+        expect("Username inbox with Notes and counted Requests", ScreenRules.Screen.DM_INBOX,
+                instagram(nodes(node("darren236", "", "", false, 100, 80),
+                        node("Your note", "", "", false, 400, 80),
+                        node("Requests (5)", "", "", false, 900, 80))));
+        expect("Inbox heading below Notes", ScreenRules.Screen.DM_INBOX,
+                instagram(nodes(node("Messages", "", "", false, 950, 80),
+                        node("Requests", "", "", false, 950, 80))));
+        expect("Home inbox icon does not qualify as inbox", ScreenRules.Screen.OTHER,
+                instagram(nodes(node("", "Messages", "direct_inbox", false, 100, 80))));
+
+        List<ScreenRules.NodeData> narrowComments = nodes(
+                wideNode("", "", "reels_viewer", 0, 2300),
+                wideNode("", "", "video_pager", 0, 2300),
+                new ScreenRules.NodeData("", "Comments (128)", "", "", "", false, false,
+                        400, 650, 730, 240, 80),
+                node("Add comment…", "", "", false, 2100, 100));
+        expect("Instagram narrow comment heading", ScreenRules.Screen.COMMENTS, instagram(narrowComments));
+        expect("Facebook narrow comment heading", false, facebook(narrowComments));
+        expect("TikTok narrow comment heading", ScreenRules.Screen.COMMENTS, tiktok(narrowComments));
+        ScreenRules.NodeData genericList = new ScreenRules.NodeData("", "", "", "", "androidx.recyclerview.widget.RecyclerView",
+                false, false, 0, 800, 2000, 1080, 1200);
+        List<ScreenRules.NodeData> sortedComments = nodes(
+                wideNode("", "", "reels_viewer", 0, 2300), genericList,
+                node("Most relevant", "", "", false, 700, 80),
+                node("Write a comment…", "", "", false, 2100, 100));
+        expect("Facebook generic comment list and sorting", false, facebook(sortedComments));
+        List<ScreenRules.NodeData> replies = nodes(wideNode("", "", "video_pager", 0, 2300),
+                genericList, node("Reply", "", "", false, 1000, 70),
+                node("Reply", "", "", false, 1500, 70),
+                node("Add comment…", "", "", false, 2100, 100));
+        expect("TikTok generic comments list and replies", ScreenRules.Screen.COMMENTS, tiktok(replies));
+        expect("Custom-rendered Facebook comments without list class", false,
+                facebook(nodes(wideNode("", "", "reels_viewer", 0, 2300),
+                        node("All comments", "", "", false, 700, 80),
+                        node("Write a public comment…", "", "", false, 2100, 100))));
+        expect("Custom-rendered TikTok comments without list class", ScreenRules.Screen.COMMENTS,
+                tiktok(nodes(wideNode("", "", "video_pager", 0, 2300),
+                        node("Reply", "", "", false, 1000, 70),
+                        node("Reply", "", "", false, 1500, 70),
+                        node("Add comment…", "", "", false, 2100, 100))));
+        List<ScreenRules.NodeData> reelWithList = nodes(genericList,
+                wideNode("", "", "reels_viewer", 0, 2300),
+                railNode("", "Comments", 1500),
+                node("Add a comment...", "", "", false, 2100, 100));
+        expect("Right-side comment button and composer remain a Reel", true, facebook(reelWithList));
+        expect("Reply list without composer is not comments", false,
+                ScreenRules.commentsPanel(nodes(genericList, node("Reply", "", "", false, 1000, 70),
+                        node("Reply", "", "", false, 1500, 70)), DISPLAY_HEIGHT, DISPLAY_WIDTH));
+
+        expect("Back confirms opened Instagram shared viewer", true,
+                ScreenRules.instagramOpenedViewer(countedActions, DISPLAY_HEIGHT));
+        expect("Selected Instagram feed cannot use missing-click fallback", false,
+                ScreenRules.instagramOpenedViewer(nodes(node("Reels", "", "", true, 2250, 80),
+                        node("Back", "", "", false, 100, 80)), DISPLAY_HEIGHT));
+        expect("Home cannot use missing-click fallback", false,
+                ScreenRules.instagramOpenedViewer(nodes(node("Home", "", "", true, 2250, 80),
+                        node("Back", "", "", false, 100, 80)), DISPLAY_HEIGHT));
+        ChatVideoOrigin origin = new ChatVideoOrigin();
+        expect("Unknown event cannot create shared video origin", false, origin.canOpen(100));
+        origin.sawChat(1000);
+        expect("Missing click source preserves recent-chat handoff", true, origin.canOpen(1400));
+        expect("Loading screen gets bounded transition grace", true, origin.transitioning(2000));
+        expect("Stale chat cannot permit unrelated viewer", false, origin.canOpen(2500));
+        origin.mediaClick(3000);
+        expect("Explicit media tap survives a slower load", true, origin.canOpen(5200));
+        expect("Explicit tap expires", false, origin.canOpen(6000));
+        origin.navigationClick(7000);
+        origin.sawChat(7100);
+        expect("Navigation rejects stale chat snapshot", false, origin.canOpen(7200));
+        origin.sawChat(9000);
+        origin.mediaClick(9100);
+        origin.clear();
+        expect("Leaving app clears shared video evidence", false, origin.canOpen(9200));
+        System.out.println("ScreenRules tests passed: " + assertionCount + " assertions");
     }
 
     private static ScreenRules.Screen instagram(List<ScreenRules.NodeData> nodes) {
@@ -376,6 +454,7 @@ public final class ScreenRulesTest {
     }
 
     private static void expect(String name, Object expected, Object actual) {
+        assertionCount++;
         if (!expected.equals(actual)) {
             throw new AssertionError(name + ": expected " + expected + ", got " + actual);
         }

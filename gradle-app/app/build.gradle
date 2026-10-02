@@ -15,8 +15,8 @@ android {
         applicationId 'com.darren.quietfeed'
         minSdk 23
         targetSdk 36
-        versionCode 11
-        versionName '1.10'
+        versionCode 12
+        versionName '1.11'
     }
 
     sourceSets {
@@ -52,11 +52,13 @@ android {
 def ruleClasses = layout.buildDirectory.dir('screen-rule-tests')
 def compileRules = tasks.register('compileScreenRuleTests', JavaCompile) {
     source = files('../../src/com/darren/quietfeed/ScreenRules.java',
+            '../../src/com/darren/quietfeed/ChatVideoOrigin.java',
             '../../tests/com/darren/quietfeed/ScreenRulesTest.java')
     classpath = files()
     destinationDirectory = ruleClasses
     sourceCompatibility = '17'
     targetCompatibility = '17'
+    options.encoding = 'UTF-8'
 }
 def ruleTests = tasks.register('screenRulesTest', JavaExec) {
     dependsOn compileRules

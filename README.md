@@ -18,7 +18,7 @@ The app is built with Android Gradle Plugin 8.12, Gradle 9.3.1, JDK 17 or newer,
 ./build.sh
 ```
 
-The signed APK is named with its version, such as `dist/QuietFeed-1.10.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
+The signed APK is named with its version, such as `dist/QuietFeed-1.11.apk`. The app targets Android 16 and remains installable on Android 6 or newer. On a fresh checkout, the script generates a random signing password in `build/signing.properties` and creates a local signing key at `build/quietfeed.keystore`. Both files are ignored by Git. Back up both files securely: future APKs need the same key and password to install as updates without uninstalling the app.
 
 ## Development and checks
 
@@ -41,7 +41,7 @@ If Android shows **Restricted setting** instead of allowing the service, open **
 For a phone connected by USB with debugging enabled, you can also install the APK using:
 
 ```sh
-"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.10.apk
+"${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb" install -r dist/QuietFeed-1.11.apk
 ```
 
 ## How it works
@@ -58,7 +58,7 @@ Detected comment panels are allowed in all three apps, including reading, writin
 
 ## Limitations and privacy
 
-Detection currently relies on English accessibility labels, view identifiers, and screen geometry. Other languages, interface experiments, and app updates can change the results. Shared-video modes identify a media click from a chat; they do not verify the sender's identity or friendship status. If Instagram does not expose that click, the shared Reel is blocked rather than granting access based only on the previous chat screen.
+Detection currently relies on English accessibility labels, view identifiers, and screen geometry. Other languages, interface experiments, and app updates can change the results. Shared-video modes use the on-screen path from a chat; they do not verify the sender's identity or friendship status. Instagram accepts a recent chat media tap or a brief transition from a confirmed chat into an opened viewer with Back/Close controls. This handles missing click events. Feed tabs and detected unrelated navigation revoke that allowance, but ambiguous navigation can still cause missed blocks or false blocks.
 
 Accessibility access lets the service inspect window contents. QuietFeed processes supported apps' visible UI locally and does not store message contents, send analytics, or request internet permission. Some banking apps reject enabled accessibility services; disable QuietFeed's service in Android settings when required.
 

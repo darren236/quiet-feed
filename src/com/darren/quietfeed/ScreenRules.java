@@ -76,6 +76,11 @@ final class ScreenRules {
         int railCommentTop = -1;
         int railShareTop = -1;
         boolean inboxCompanion = false;
+        boolean inboxContainer = false;
+        boolean inboxSearch = false;
+        boolean inboxCompose = false;
+        boolean inboxRequests = false;
+        boolean inboxNotes = false;
         boolean login = false;
         boolean password = false;
         boolean viewerContainer = false;
@@ -108,7 +113,9 @@ final class ScreenRules {
                     && n.top > displayHeight * 2 / 3) {
                 messageEntry = true;
             }
-            if ((n.labelIs("messages") || n.labelIs("chats")) && n.top < displayHeight / 3) {
+            if ((n.labelIs("messages") || n.labelIs("chats")
+                    || n.labelIs("messages, heading") || n.labelIs("chats, heading"))
+                    && n.top < displayHeight * 2 / 3) {
                 messageHeader = true;
             }
             if (n.labelContains("search messages") || n.labelIs("requests")
@@ -117,6 +124,30 @@ final class ScreenRules {
                     || n.labelIs("new message") || n.labelIs("new chat")) {
                 inboxCompanion = true;
             }
+            // Current inbox layouts may show the account name in the title
+            // instead of "Messages". Require inbox structure or a combination
+            // of inbox controls, rather than interpreting any account name.
+            if ((n.idContains("direct_inbox") && n.width >= displayWidth * 2 / 3
+                    && n.height >= displayHeight / 4) || n.idContains("inbox_recycler")
+                    || n.idContains("inbox_list") || n.idContains("row_inbox_thread")
+                    || n.idContains("direct_thread_row") || n.idContains("direct_thread_list"))
+                inboxContainer = true;
+            if (n.top < displayHeight / 3
+                    && (n.labelContains("search messages") || n.idContains("inbox_search")
+                            || n.idContains("direct_search")
+                            || (n.labelIs("search") && (n.className.contains("edittext")
+                                    || n.idContains("search"))))) inboxSearch = true;
+            if (n.top < displayHeight / 3
+                    && (n.labelIs("new message") || n.labelIs("new chat")
+                            || n.labelIs("compose") || n.idContains("direct_compose")
+                            || n.idContains("new_message"))) inboxCompose = true;
+            if (n.top < displayHeight * 2 / 3
+                    && (n.labelMatches("requests([ ,:(].*)?") || n.labelContains("message requests")
+                            || n.idContains("inbox_requests"))) inboxRequests = true;
+            if (n.top < displayHeight / 2
+                    && (n.labelMatches("your notes?([, ].*)?")
+                            || n.labelContains("leave a note") || n.idContains("notes_tray")))
+                inboxNotes = true;
             if (n.labelIs("log in") || n.labelIs("login")) login = true;
             if (n.labelIs("password")) password = true;
 
@@ -154,9 +185,11 @@ final class ScreenRules {
                 && (fullScreenMedia || originalAudio || reelHeading);
         if (messageEntry && !viewerContainer && !reelTabSelected && !unmarkedViewer)
             return Screen.DM_THREAD;
-        if (messageHeader && inboxCompanion) return Screen.DM_INBOX;
         if (viewerContainer || (reelTabSelected && like && comment)
                 || unmarkedViewer) return Screen.REEL;
+        if ((messageHeader && inboxCompanion) || inboxContainer
+                || (inboxSearch && (inboxCompose || inboxRequests || inboxNotes))
+                || (inboxRequests && (inboxCompose || inboxNotes))) return Screen.DM_INBOX;
         if (login && password) return Screen.LOGIN;
         return Screen.OTHER;
     }
@@ -331,6 +364,23 @@ final class ScreenRules {
         return true;
     }
 
+    static boolean instagramOpenedViewer(List<NodeData> nodes, int displayHeight) {
+        boolean backOrClose = false;
+        boolean selectedHome = false;
+        boolean dedicatedViewer = false;
+        for (NodeData n : nodes) {
+            if (isSelectedTab(n, "reels", displayHeight)
+                    || (n.selected && n.idContains("clips_tab"))) return false;
+            if (isViewerNavigation(n, displayHeight)) backOrClose = true;
+            if (isSelectedTab(n, "home", displayHeight)) selectedHome = true;
+            if (n.top < displayHeight / 6 && n.bottom > displayHeight * 4 / 5
+                    && (n.idContains("clips_viewer") || n.idContains("clips_video_container")
+                            || n.idContains("reel_pager") || n.idContains("reels_viewer")
+                            || n.idContains("reel_viewer"))) dedicatedViewer = true;
+        }
+        return backOrClose && (!selectedHome || dedicatedViewer);
+    }
+
     static boolean tiktokOpenedViewer(List<NodeData> nodes, int displayHeight) {
         boolean backOrClose = false;
         boolean selectedFeedTab = false;
@@ -349,7 +399,9 @@ final class ScreenRules {
         boolean heading = false;
         boolean composer = false;
         boolean commentList = false;
+        boolean genericList = false;
         boolean sorting = false;
+        int replyActions = 0;
         for (NodeData n : nodes) {
             boolean wide = n.width >= displayWidth / 3;
             boolean list = n.idContains("comment_list") || n.idContains("comments_list")
@@ -357,21 +409,37 @@ final class ScreenRules {
             if (wide && n.height >= displayHeight / 4 &&
                     (n.idContains("comments_sheet") || n.idContains("comment_sheet")
                             || n.idContains("comments_bottom_sheet")
-                            || n.idContains("comment_bottom_sheet"))) return true;
+                            || n.idContains("comment_bottom_sheet")
+                            || n.idContains("comments_dialog") || n.idContains("comment_dialog")
+                            || n.idContains("comments_panel") || n.idContains("comment_panel"))) return true;
             if (wide && list && n.height >= displayHeight / 4) commentList = true;
-            if (wide && n.top < displayHeight * 3 / 4
-                    && (n.labelIs("comments") || n.labelMatches("[0-9.,km]+ comments")
-                            || n.labelMatches("comments [0-9.,km]+")
+            if (wide && n.height >= displayHeight / 4
+                    && (n.className.contains("recyclerview") || n.className.contains("listview")
+                            || n.className.contains("scrollview"))) genericList = true;
+            // Comment-sheet titles are often narrow, wrap-content labels.
+            // Exclude the vertical video control rail instead of requiring a
+            // wide title, so a video's Comments button cannot exempt it.
+            boolean videoRail = n.left >= displayWidth * 2 / 3
+                    && n.width <= displayWidth / 3 && n.top > displayHeight / 3;
+            if (!videoRail && n.top < displayHeight * 3 / 4
+                    && n.height <= displayHeight / 5
+                    && (n.labelIs("comments") || n.labelMatches("[0-9.,km ]+ comments")
+                            || n.labelMatches("comments[ ,:]*\\(?[0-9.,km ]+\\)?")
                             || n.idContains("comments_title") || n.idContains("comment_header")))
                 heading = true;
             if (n.labelContains("add a comment") || n.labelContains("write a comment")
+                    || n.labelContains("write a public comment") || n.labelContains("comment as ")
+                    || n.labelContains("add comment") || n.labelContains("write comment")
+                    || n.labelContains("leave a comment")
                     || (n.className.contains("edittext") && n.labelContains("comment")))
                 composer = true;
-            if (n.labelIs("most relevant") || n.labelIs("newest")
-                    || n.labelIs("top comments") || n.labelIs("all comments")) sorting = true;
+            if (n.labelMatches("(most relevant|newest|top comments|all comments)(, .*| selected)?"))
+                sorting = true;
+            if (n.labelIs("reply") && n.top > displayHeight / 5) replyActions++;
         }
-        return (heading && (composer || commentList || sorting))
-                || (commentList && composer);
+        return (heading && (composer || commentList || genericList || sorting))
+                || (commentList && composer)
+                || (composer && (sorting || replyActions >= 2));
     }
 
     static boolean instagramMessagesButton(NodeData n, int displayHeight) {
