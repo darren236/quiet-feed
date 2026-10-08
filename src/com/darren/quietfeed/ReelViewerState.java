@@ -2,10 +2,17 @@ package com.darren.quietfeed;
 
 /** Preserves a shared viewer through short loading gaps and distinguishes paging from layout. */
 final class ReelViewerState {
+    private final boolean tikTok;
     private long lastViewerAt = -1;
     private String sourceKey = "";
     private int lastIndex = -1;
     private int lastScrollY = -1;
+
+    ReelViewerState() { this(false); }
+
+    private ReelViewerState(boolean tikTok) { this.tikTok = tikTok; }
+
+    static ReelViewerState forTikTok() { return new ReelViewerState(true); }
 
     void sawViewer(long now) { lastViewerAt = now; }
 
@@ -16,13 +23,25 @@ final class ReelViewerState {
     boolean scrolled(ScreenRules.NodeData source, int height, int width, boolean armed,
                      int deltaY, int deltaX, int firstIndex, int scrollY) {
         if (source == null || source.idContains("comment") || source.labelContains("comments")
-                || source.width < width * 2 / 3 || source.height < height * 2 / 3)
+                || source.width < width * 2 / 3
+                || source.height < (tikTok ? height * 3 / 5 : height * 2 / 3))
             return false;
-        boolean pager = source.idContains("clips_viewer") || source.idContains("clips_pager")
+        boolean pager = tikTok
+                ? source.idContains("video_pager") || source.idContains("feed_pager")
+                    || source.className.contains("viewpager")
+                : source.idContains("clips_viewer") || source.idContains("clips_pager")
                 || source.idContains("reel_pager") || source.idContains("reels_viewer")
                 || source.idContains("reel_viewer") || source.className.contains("viewpager")
                 || source.className.contains("recyclerview");
-        if (!pager) return false;
+        if (!pager) {
+            // Unidentified lists may be comments; other TikTok containers need clear movement.
+            if (!tikTok || source.className.contains("recyclerview")
+                    || source.className.contains("listview") || source.className.contains("scrollview"))
+                return false;
+            long vertical = deltaY == -1 ? 0 : Math.abs((long) deltaY);
+            long horizontal = deltaX == -1 ? 0 : Math.abs((long) deltaX);
+            return armed && vertical >= height / 3 && vertical > horizontal;
+        }
         String key = source.id + "|" + source.className;
         if (!key.equals(sourceKey)) {
             sourceKey = key;

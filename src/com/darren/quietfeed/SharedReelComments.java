@@ -1,6 +1,6 @@
 package com.darren.quietfeed;
 
-/** Comments belong to the already allowed Reel, including incomplete UI snapshots. */
+/** Comments belong to the already allowed shared video, including incomplete UI snapshots. */
 final class SharedReelComments {
     private boolean open;
     private long openedAt;

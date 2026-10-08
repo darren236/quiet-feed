@@ -37,6 +37,7 @@ Use test accounts and record the phone model, Android version, social-app versio
 - [ ] **Facebook:** feed previews remain visible; opened Reels return Home; detected comments and comment scrolling remain available.
 - [ ] **TikTok Block videos:** feeds and opened videos, including chat videos, return Home; inbox, chats, and detected comments remain available.
 - [ ] **TikTok chat mode:** inbox and chats remain available; a chat video is allowed until the first video swipe; comment scrolling does not count as that swipe; the Friends feed shows the gate.
+- [ ] **TikTok shared video loading:** leave a chat idle, open a shared video, and allow slower loading; opening/layout events must not return Home. Open, scroll, and close comments, then confirm the first actual video swipe returns Home.
 - [ ] **Transitions:** Back, keyboards, comment-sheet animations, switching apps, and turning a mode Off leave no stale gate or delayed Home action.
 - [ ] **Service:** disabling accessibility removes protection; enabling it restores the selected modes. On a supported Samsung phone, check the documented hardware shortcut separately from emulator tests.
 

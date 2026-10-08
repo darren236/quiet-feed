@@ -42,8 +42,6 @@ public final class ShieldService extends AccessibilityService {
     private static final long EXIT_COOLDOWN_MS = 1200;
     private static final long EXIT_NOTICE_LEAD_MS = 220;
     private static final long EXIT_NOTICE_HOLD_MS = 1400;
-    private static final long TIKTOK_OPEN_GRACE_MS = 4000;
-    private static final long TIKTOK_TRANSITION_GRACE_MS = 1200;
     private static final long COMMENTS_TRANSITION_MS = 1200;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -65,9 +63,9 @@ public final class ShieldService extends AccessibilityService {
     private boolean dmReelActive;
     private long dmReelAllowedAt;
     private ScreenRules.Screen lastTikTokScreen = ScreenRules.Screen.OTHER;
-    private long pendingTikTokOpenUntil;
-    private long pendingTikTokOpenStartedAt;
-    private long lastTikTokChatAt;
+    private final ChatVideoOrigin tiktokOrigin = new ChatVideoOrigin();
+    private final SharedReelComments tiktokComments = new SharedReelComments();
+    private final ReelViewerState tiktokViewer = ReelViewerState.forTikTok();
     private long tiktokNavigationGraceUntil;
     private boolean tiktokSharedVideoActive;
     private long tiktokVideoAllowedAt;
@@ -95,6 +93,12 @@ public final class ShieldService extends AccessibilityService {
                         instagramComments.clear();
                         instagramOrigin.clear();
                         clearInstagramReel();
+                    }
+                    if ("tiktok_mode".equals(key)) {
+                        tiktokOrigin.clear();
+                        clearTikTokVideo();
+                        lastTikTokScreen = ScreenRules.Screen.OTHER;
+                        tiktokNavigationGraceUntil = 0;
                     }
                     handler.removeCallbacks(inspection);
                     nextInspectionAt = 0;
@@ -146,6 +150,10 @@ public final class ShieldService extends AccessibilityService {
                     instagramComments.open(dmReelActive, now);
                     instagramViewer.resetScroll();
                 }
+                if (isTikTok(eventPackage) && "dm".equals(tiktokMode())) {
+                    tiktokComments.open(tiktokSharedVideoActive, now);
+                    tiktokViewer.resetScroll();
+                }
                 commentsTransitionUntil = now + COMMENTS_TRANSITION_MS;
                 cancelPendingExit();
                 exitSuppressedUntil = 0;
@@ -192,18 +200,40 @@ public final class ShieldService extends AccessibilityService {
                         clearInstagramReel();
                     }
                 }
-            } else if (source != null) {
-                if (isTikTok(eventPackage) && "dm".equals(tiktokMode())) {
-                    if (lastTikTokScreen == ScreenRules.Screen.DM_THREAD
-                            && isPossibleMediaOpen(source)) {
-                        pendingTikTokOpenUntil = now + TIKTOK_OPEN_GRACE_MS;
-                        pendingTikTokOpenStartedAt = now;
+            } else if (isTikTok(eventPackage) && "dm".equals(tiktokMode())) {
+                boolean chat = false;
+                boolean chatHandoff = lastTikTokScreen == ScreenRules.Screen.DM_THREAD
+                        || tiktokOrigin.canOpen(now);
+                AccessibilityNodeInfo root = findTargetRoot();
+                if (root != null && eventPackage.equals(asString(root.getPackageName()))) {
+                    List<ScreenRules.NodeData> clickNodes = collectScreenNodes(root);
+                    int h = getResources().getDisplayMetrics().heightPixels;
+                    int w = getResources().getDisplayMetrics().widthPixels;
+                    ScreenRules.Screen clickScreen = ScreenRules.tiktok(clickNodes, h, w);
+                    chat = clickScreen == ScreenRules.Screen.DM_THREAD;
+                    if (chat) tiktokOrigin.sawChat(now);
+                    chatHandoff = (lastTikTokScreen == ScreenRules.Screen.DM_THREAD
+                            || tiktokOrigin.canOpen(now))
+                            && (clickScreen == ScreenRules.Screen.REEL
+                                || (clickScreen == ScreenRules.Screen.OTHER
+                                    && !ScreenRules.tiktokFeedNavigation(clickNodes, h)
+                                    && !ScreenRules.tiktokProfileScreen(clickNodes, h)));
+                }
+                boolean navigationClick = isTikTokNavigationClick(event, source);
+                boolean mediaClick = (source != null && isPossibleMediaOpen(source))
+                        || eventLabel(event).contains("video");
+                if (!navigationClick && mediaClick
+                        && tiktokOrigin.mediaClickFromChat(now, chat, chatHandoff)) {
+                    cancelPendingExit();
+                    exitSuppressedUntil = 0;
+                    hideExitNotice();
+                }
+                if (navigationClick) {
+                    if (tiktokComments.isOpen() && isBackOrCloseClick(event, source)) {
+                        tiktokComments.requestClose(now);
                     } else {
-                        pendingTikTokOpenUntil = 0;
-                        pendingTikTokOpenStartedAt = 0;
-                        if (lastTikTokScreen == ScreenRules.Screen.DM_THREAD) {
-                            lastTikTokChatAt = 0;
-                        }
+                        tiktokOrigin.navigationClick(now);
+                        clearTikTokVideo();
                     }
                 }
             }
@@ -213,8 +243,18 @@ public final class ShieldService extends AccessibilityService {
                 && event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED
                 && now >= dmReelAllowedAt + DM_SCROLL_ARM_DELAY_MS
                 && currentIsVideoViewer(eventPackage)
-                && isConfirmedInstagramViewerPaging(event)) {
+                && isConfirmedViewerPaging(event)) {
             instagramComments.clear();
+            commentsTransitionUntil = 0;
+            exitTarget(eventPackage, true);
+            return;
+        }
+
+        if (isTikTok(eventPackage) && tiktokSharedVideoActive && tiktokComments.isOpen()
+                && event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED
+                && now >= tiktokVideoAllowedAt + DM_SCROLL_ARM_DELAY_MS
+                && currentIsVideoViewer(eventPackage) && isConfirmedViewerPaging(event)) {
+            tiktokComments.clear();
             commentsTransitionUntil = 0;
             exitTarget(eventPackage, true);
             return;
@@ -223,6 +263,17 @@ public final class ShieldService extends AccessibilityService {
         if (INSTAGRAM.equals(eventPackage) && instagramComments.isOpen()
                 && currentInstagramCommentsAllowed(now)) {
             instagramViewer.resetScroll();
+            commentsTransitionUntil = 0;
+            cancelPendingExit();
+            exitSuppressedUntil = 0;
+            hideExitNotice();
+            hideOverlay();
+            scheduleInspection(100);
+            return;
+        }
+
+        if (isTikTok(eventPackage) && tiktokComments.isOpen() && currentTikTokCommentsAllowed(now)) {
+            tiktokViewer.resetScroll();
             commentsTransitionUntil = 0;
             cancelPendingExit();
             exitSuppressedUntil = 0;
@@ -255,9 +306,8 @@ public final class ShieldService extends AccessibilityService {
         }
         if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED
                 && isTikTok(eventPackage) && tiktokSharedVideoActive
-                && lastTikTokScreen == ScreenRules.Screen.REEL
-                && now >= tiktokVideoAllowedAt + DM_SCROLL_ARM_DELAY_MS
-                && currentIsVideoViewer(eventPackage) && isTikTokViewerScroll(event)) {
+                && currentIsVideoViewer(eventPackage)
+                && isTikTokViewerScroll(event, now >= tiktokVideoAllowedAt + DM_SCROLL_ARM_DELAY_MS)) {
             exitTarget(eventPackage, true);
             return;
         }
@@ -291,6 +341,13 @@ public final class ShieldService extends AccessibilityService {
         instagramViewer.clear();
     }
 
+    private void clearTikTokVideo() {
+        tiktokSharedVideoActive = false;
+        tiktokVideoAllowedAt = 0;
+        tiktokComments.clear();
+        tiktokViewer.clear();
+    }
+
     private void clearTargetState() {
         handler.removeCallbacks(inspection);
         nextInspectionAt = 0;
@@ -302,12 +359,9 @@ public final class ShieldService extends AccessibilityService {
         commentsTransitionUntil = 0;
         clearInstagramReel();
         lastTikTokScreen = ScreenRules.Screen.OTHER;
-        pendingTikTokOpenUntil = 0;
-        pendingTikTokOpenStartedAt = 0;
-        lastTikTokChatAt = 0;
+        tiktokOrigin.clear();
         tiktokNavigationGraceUntil = 0;
-        tiktokSharedVideoActive = false;
-        tiktokVideoAllowedAt = 0;
+        clearTikTokVideo();
         exitSuppressedUntil = 0;
     }
 
@@ -346,10 +400,8 @@ public final class ShieldService extends AccessibilityService {
         }
         if (isTikTok(packageName) && "off".equals(tiktokMode())) {
             lastTikTokScreen = ScreenRules.Screen.OTHER;
-            tiktokSharedVideoActive = false;
-            pendingTikTokOpenUntil = 0;
-            pendingTikTokOpenStartedAt = 0;
-            lastTikTokChatAt = 0;
+            tiktokOrigin.clear();
+            clearTikTokVideo();
             hideOverlay();
             return;
         }
@@ -362,6 +414,10 @@ public final class ShieldService extends AccessibilityService {
             if (INSTAGRAM.equals(packageName) && "dm".equals(instagramMode())) {
                 instagramComments.open(dmReelActive, now);
                 instagramViewer.resetScroll();
+            }
+            if (isTikTok(packageName) && "dm".equals(tiktokMode())) {
+                tiktokComments.open(tiktokSharedVideoActive, now);
+                tiktokViewer.resetScroll();
             }
             // Keep any existing shared-video grant while reading or writing comments.
             cancelPendingExit();
@@ -380,8 +436,8 @@ public final class ShieldService extends AccessibilityService {
         if (INSTAGRAM.equals(packageName)) {
             String mode = instagramMode();
             ScreenRules.Screen screen = ScreenRules.instagram(nodes, displayHeight, displayWidth);
-            boolean commentContent = ScreenRules.instagramCommentContent(nodes, displayHeight, displayWidth);
-            if ("dm".equals(mode) && ScreenRules.instagramCommentPanelEvidence(nodes, displayHeight, displayWidth))
+            boolean commentContent = ScreenRules.commentContent(nodes, displayHeight, displayWidth);
+            if ("dm".equals(mode) && ScreenRules.commentPanelEvidence(nodes, displayHeight, displayWidth))
                 instagramComments.open(dmReelActive, now);
             if (ScreenRules.instagramProfileScreen(nodes, displayHeight, displayWidth)) {
                 instagramComments.clear();
@@ -467,63 +523,88 @@ public final class ShieldService extends AccessibilityService {
         } else if (isTikTok(packageName)) {
             ScreenRules.Screen screen = ScreenRules.tiktok(nodes, displayHeight, displayWidth);
             if ("videos".equals(tiktokMode())) {
-                tiktokSharedVideoActive = false;
-                pendingTikTokOpenUntil = 0;
-                lastTikTokChatAt = 0;
+                clearTikTokVideo();
+                tiktokOrigin.clear();
                 lastTikTokScreen = screen;
                 if (screen == ScreenRules.Screen.REEL) exitTarget(packageName);
                 else hideOverlay();
                 return;
             }
-            ScreenRules.Screen previousScreen = lastTikTokScreen;
+            boolean profile = ScreenRules.tiktokProfileScreen(nodes, displayHeight);
+            boolean eligible = ScreenRules.tiktokSharedVideoEligible(nodes, displayHeight) && !profile;
+            if (!eligible) {
+                tiktokOrigin.clear();
+                clearTikTokVideo();
+            }
+            if (ScreenRules.commentPanelEvidence(nodes, displayHeight, displayWidth))
+                tiktokComments.open(tiktokSharedVideoActive, now);
+            if (eligible && tiktokComments.allows(screen,
+                    ScreenRules.commentContent(nodes, displayHeight, displayWidth),
+                    tiktokSharedVideoActive, now)) {
+                cancelPendingExit();
+                exitSuppressedUntil = 0;
+                hideExitNotice();
+                hideOverlay();
+                return;
+            }
+            if (lastTikTokScreen == ScreenRules.Screen.DM_THREAD && eligible
+                    && ((screen == ScreenRules.Screen.REEL
+                            && ScreenRules.tiktokOpenedViewer(nodes, displayHeight))
+                        || (screen == ScreenRules.Screen.OTHER
+                            && !ScreenRules.tiktokFeedNavigation(nodes, displayHeight)))) {
+                tiktokOrigin.leftChat(now);
+            }
             lastTikTokScreen = screen;
 
             if (screen == ScreenRules.Screen.DM_THREAD
                     || screen == ScreenRules.Screen.DM_INBOX
                     || screen == ScreenRules.Screen.LOGIN) {
-                tiktokSharedVideoActive = false;
-                tiktokVideoAllowedAt = 0;
+                clearTikTokVideo();
                 tiktokNavigationGraceUntil = 0;
-                if (screen != ScreenRules.Screen.DM_THREAD) {
-                    pendingTikTokOpenUntil = 0;
-                    pendingTikTokOpenStartedAt = 0;
-                    lastTikTokChatAt = 0;
-                } else {
-                    lastTikTokChatAt = now;
-                }
+                if (screen == ScreenRules.Screen.DM_THREAD) tiktokOrigin.sawChat(now);
+                else tiktokOrigin.clear();
                 hideOverlay();
             } else if (screen == ScreenRules.Screen.REEL) {
-                boolean openedFromChat = ScreenRules.tiktokOpenedViewer(
-                        nodes, displayHeight);
-                boolean directChatTransition = lastTikTokChatAt > 0
-                        && (previousScreen == ScreenRules.Screen.DM_THREAD
-                                || now < lastTikTokChatAt + TIKTOK_TRANSITION_GRACE_MS);
-                if (!tiktokSharedVideoActive && openedFromChat
-                        && (now < pendingTikTokOpenUntil || directChatTransition)) {
+                if (!tiktokSharedVideoActive && eligible && tiktokOrigin.canOpen(now)
+                        && ScreenRules.tiktokOpenedViewer(nodes, displayHeight,
+                                tiktokOrigin.hasMediaClick(now))) {
                     tiktokSharedVideoActive = true;
                     tiktokVideoAllowedAt = now;
-                    pendingTikTokOpenUntil = 0;
-                    pendingTikTokOpenStartedAt = 0;
-                    lastTikTokChatAt = 0;
+                    tiktokViewer.clear();
+                    tiktokOrigin.clear();
+                    cancelPendingExit();
+                    exitSuppressedUntil = 0;
+                    hideExitNotice();
                 }
-                if (tiktokSharedVideoActive && openedFromChat) hideOverlay();
-                else showDmGate(packageName);
-            } else if (now < tiktokNavigationGraceUntil
-                    || (pendingTikTokOpenUntil > now
-                            && now < pendingTikTokOpenStartedAt
-                                    + TIKTOK_TRANSITION_GRACE_MS)) {
-                tiktokSharedVideoActive = false;
-                tiktokVideoAllowedAt = 0;
+                if (tiktokSharedVideoActive
+                        && ScreenRules.tiktokOpenedViewer(nodes, displayHeight, true)) {
+                    tiktokViewer.sawViewer(now);
+                    hideOverlay();
+                } else if (tiktokSharedVideoActive && tiktokViewer.loading(now)
+                        && !ScreenRules.tiktokFeedNavigation(nodes, displayHeight)) {
+                    hideOverlay();
+                    scheduleInspection(150);
+                } else if (eligible && tiktokOrigin.transitioning(now)
+                        && !ScreenRules.tiktokFeedNavigation(nodes, displayHeight)) {
+                    // The action rail can appear before the shared viewer's Back control.
+                    hideOverlay();
+                    scheduleInspection(150);
+                } else {
+                    clearTikTokVideo();
+                    tiktokOrigin.clear();
+                    showDmGate(packageName);
+                }
+            } else if (tiktokSharedVideoActive && tiktokViewer.loading(now)
+                    && !ScreenRules.tiktokFeedNavigation(nodes, displayHeight) && !profile) {
                 hideOverlay();
-                scheduleInspection(250);
+                scheduleInspection(150);
+            } else if (now < tiktokNavigationGraceUntil || tiktokOrigin.transitioning(now)) {
+                clearTikTokVideo();
+                hideOverlay();
+                scheduleInspection(150);
             } else {
-                tiktokSharedVideoActive = false;
-                tiktokVideoAllowedAt = 0;
-                if (now >= pendingTikTokOpenStartedAt + TIKTOK_TRANSITION_GRACE_MS) {
-                    pendingTikTokOpenUntil = 0;
-                    pendingTikTokOpenStartedAt = 0;
-                    lastTikTokChatAt = 0;
-                }
+                clearTikTokVideo();
+                tiktokOrigin.clear();
                 showDmGate(packageName);
             }
         }
@@ -578,11 +659,8 @@ public final class ShieldService extends AccessibilityService {
                     instagramComments.clear();
                     clearInstagramReel();
                     instagramOrigin.clear();
-                    tiktokSharedVideoActive = false;
-                    tiktokVideoAllowedAt = 0;
-                    pendingTikTokOpenUntil = 0;
-                    pendingTikTokOpenStartedAt = 0;
-                    lastTikTokChatAt = 0;
+                    tiktokOrigin.clear();
+                    clearTikTokVideo();
                     handler.removeCallbacks(dismissExitNotice);
                     handler.postDelayed(dismissExitNotice, EXIT_NOTICE_HOLD_MS);
                 } else {
@@ -743,12 +821,16 @@ public final class ShieldService extends AccessibilityService {
         int w = getResources().getDisplayMetrics().widthPixels;
         if (ScreenRules.commentsPanel(nodes, h, w)) return false;
         if (INSTAGRAM.equals(pkg) && instagramComments.allows(ScreenRules.instagram(nodes, h, w),
-                ScreenRules.instagramCommentContent(nodes, h, w), dmReelActive,
+                ScreenRules.commentContent(nodes, h, w), dmReelActive,
                 SystemClock.elapsedRealtime())) return false;
         if (FACEBOOK.equals(pkg)) return facebookEnabled() && ScreenRules.facebookReel(nodes, h, w);
         if (INSTAGRAM.equals(pkg)) return !"off".equals(instagramMode())
                 && ScreenRules.instagram(nodes, h, w) == ScreenRules.Screen.REEL
                 && (swipe || "reels".equals(instagramMode()) || !dmReelActive);
+        if (ScreenRules.tiktokSharedVideoEligible(nodes, h) && !ScreenRules.tiktokProfileScreen(nodes, h)
+                && tiktokComments.allows(ScreenRules.tiktok(nodes, h, w),
+                        ScreenRules.commentContent(nodes, h, w), tiktokSharedVideoActive,
+                        SystemClock.elapsedRealtime())) return false;
         return !"off".equals(tiktokMode()) && ScreenRules.tiktok(nodes, h, w) == ScreenRules.Screen.REEL
                 && (swipe || "videos".equals(tiktokMode()) || !tiktokSharedVideoActive);
     }
@@ -807,7 +889,7 @@ public final class ShieldService extends AccessibilityService {
             return false;
         }
         return instagramComments.allows(ScreenRules.instagram(nodes, h, w),
-                ScreenRules.instagramCommentContent(nodes, h, w), dmReelActive, now);
+                ScreenRules.commentContent(nodes, h, w), dmReelActive, now);
     }
 
     private boolean isCommentOpenClick(AccessibilityEvent event, AccessibilityNodeInfo source) {
@@ -817,6 +899,21 @@ public final class ShieldService extends AccessibilityService {
             if (n.labelContains("comment") || n.idContains("comment")) return true;
         }
         return false;
+    }
+
+    private boolean currentTikTokCommentsAllowed(long now) {
+        AccessibilityNodeInfo root = findTargetRoot();
+        if (root == null || !isTikTok(asString(root.getPackageName()))) return false;
+        List<ScreenRules.NodeData> nodes = collectScreenNodes(root);
+        int h = getResources().getDisplayMetrics().heightPixels;
+        int w = getResources().getDisplayMetrics().widthPixels;
+        if (!ScreenRules.tiktokSharedVideoEligible(nodes, h) || ScreenRules.tiktokProfileScreen(nodes, h)) {
+            tiktokOrigin.clear();
+            clearTikTokVideo();
+            return false;
+        }
+        return tiktokComments.allows(ScreenRules.tiktok(nodes, h, w),
+                ScreenRules.commentContent(nodes, h, w), tiktokSharedVideoActive, now);
     }
 
     private boolean isInstagramNavigationClick(AccessibilityEvent event, AccessibilityNodeInfo source) {
@@ -855,6 +952,31 @@ public final class ShieldService extends AccessibilityService {
         return false;
     }
 
+    private boolean isTikTokNavigationClick(AccessibilityEvent event, AccessibilityNodeInfo source) {
+        int h = getResources().getDisplayMetrics().heightPixels;
+        for (int i = 0; source != null && i < 3; i++, source = source.getParent()) {
+            ScreenRules.NodeData n = describe(source);
+            boolean navigationPosition = n.top < h / 4 || n.top > h * 4 / 5;
+            if (navigationPosition && (n.labelIs("back") || n.labelIs("close")
+                    || n.labelIs("go back") || n.labelIs("home") || n.labelIs("inbox")
+                    || n.labelIs("friends") || n.labelIs("following") || n.labelIs("for you")
+                    || n.labelIs("profile") || n.labelIs("discover") || n.labelIs("search")
+                    || n.idContains("back_button") || n.idContains("close_button")
+                    || n.idContains("home_tab") || n.idContains("tab_home")
+                    || n.idContains("friends_tab") || n.idContains("tab_friends")
+                    || n.idContains("profile_tab") || n.idContains("tab_profile")
+                    || n.idContains("inbox_tab") || n.idContains("tab_inbox"))) return true;
+            if (n.labelIs("view profile") || n.labelIs("open profile")
+                    || (n.top < h / 4 && (n.idContains("chat_header")
+                            || n.idContains("profile_button")))) return true;
+        }
+        String label = eventLabel(event).replace("[", "").replace("]", "").trim();
+        return label.equals("back") || label.equals("close") || label.equals("go back")
+                || label.equals("home") || label.equals("inbox") || label.equals("friends")
+                || label.equals("following") || label.equals("for you") || label.equals("profile")
+                || label.equals("discover") || label.equals("search");
+    }
+
     private boolean isCommentScrollSource(AccessibilityNodeInfo node) {
         for (int i = 0; node != null && i < 5; i++, node = node.getParent()) {
             ScreenRules.NodeData n = describe(node);
@@ -874,7 +996,7 @@ public final class ShieldService extends AccessibilityService {
                 event.getItemCount() > 1 ? event.getFromIndex() : -1, event.getScrollY());
     }
 
-    private boolean isConfirmedInstagramViewerPaging(AccessibilityEvent event) {
+    private boolean isConfirmedViewerPaging(AccessibilityEvent event) {
         if (Build.VERSION.SDK_INT < 28) return false;
         AccessibilityNodeInfo source = event.getSource();
         if (source == null || isCommentScrollSource(source)) return false;
@@ -883,22 +1005,25 @@ public final class ShieldService extends AccessibilityService {
         int w = getResources().getDisplayMetrics().widthPixels;
         boolean pager = n.idContains("clips_viewer") || n.idContains("reel_pager")
                 || n.idContains("reels_viewer") || n.idContains("reel_viewer")
+                || n.idContains("video_pager") || n.idContains("feed_pager")
                 || n.className.contains("viewpager");
-        if (!pager || n.width < w * 2 / 3 || n.height < h * 2 / 3) return false;
-        long vertical = Math.abs((long) event.getScrollDeltaY());
-        long horizontal = Math.abs((long) event.getScrollDeltaX());
+        boolean tikTok = isTikTok(asString(event.getPackageName()));
+        if (!pager || n.width < w * 2 / 3 || n.height < (tikTok ? h * 3 / 5 : h * 2 / 3)) return false;
+        long vertical = event.getScrollDeltaY() == -1 ? 0 : Math.abs((long) event.getScrollDeltaY());
+        long horizontal = event.getScrollDeltaX() == -1 ? 0 : Math.abs((long) event.getScrollDeltaX());
         return vertical >= h / 3 && vertical > horizontal;
     }
 
-    private boolean isTikTokViewerScroll(AccessibilityEvent event) {
+    private boolean isTikTokViewerScroll(AccessibilityEvent event, boolean armed) {
         AccessibilityNodeInfo source = event.getSource();
         if (source == null || isCommentScrollSource(source)) return false;
         int height = getResources().getDisplayMetrics().heightPixels;
         int width = getResources().getDisplayMetrics().widthPixels;
         boolean hasScrollDelta = Build.VERSION.SDK_INT >= 28;
-        return ScreenRules.tiktokViewerScroll(describe(source), height, width, hasScrollDelta,
+        return tiktokViewer.scrolled(describe(source), height, width, armed,
                 hasScrollDelta ? event.getScrollDeltaY() : 0,
-                hasScrollDelta ? event.getScrollDeltaX() : 0);
+                hasScrollDelta ? event.getScrollDeltaX() : 0,
+                event.getItemCount() > 1 ? event.getFromIndex() : -1, event.getScrollY());
     }
 
     private void showDmGate(String packageName) {
@@ -1021,10 +1146,8 @@ public final class ShieldService extends AccessibilityService {
         AccessibilityNodeInfo root = findVisibleTargetRootForGate(packageName);
         AccessibilityNodeInfo button = findTikTokInboxButton(root, 0);
         hideOverlay();
-        pendingTikTokOpenUntil = 0;
-        pendingTikTokOpenStartedAt = 0;
-        lastTikTokChatAt = 0;
-        tiktokSharedVideoActive = false;
+        tiktokOrigin.clear();
+        clearTikTokVideo();
         tiktokNavigationGraceUntil = SystemClock.elapsedRealtime() + 2000;
         boolean clicked = button != null && clickNodeOrParent(button);
         if (!clicked) {

@@ -251,47 +251,150 @@ public final class ScreenRulesTest {
         expect("TikTok profile is outside messages", ScreenRules.Screen.OTHER,
                 tiktok(tiktokProfile));
 
+        // Replay a chat tap, slow load, stationary pager events, comments, then a real swipe.
+        ChatVideoOrigin tikTokOrigin = new ChatVideoOrigin();
+        ReelViewerState tikTokViewer = ReelViewerState.forTikTok();
+        SharedReelComments tikTokComments = new SharedReelComments();
+        tikTokOrigin.sawChat(1000);
+        expect("TikTok idle chat tap survives root changing before click delivery", true,
+                tikTokOrigin.mediaClickFromChat(61000, false, true));
+        expect("TikTok chat tap survives five-second video loading", true,
+                tikTokOrigin.transitioning(66000));
+        expect("TikTok slow loading allowance still expires", false, tikTokOrigin.canOpen(69000));
+        List<ScreenRules.NodeData> tikTokWithoutBack = nodes(
+                wideNode("", "", "video_pager", 0, 2300), railNode("", "Like video", 1350),
+                railNode("", "Comments", 1550), railNode("", "Share video", 1750));
+        expect("TikTok dedicated viewer with no Back label is a video", ScreenRules.Screen.REEL,
+                tiktok(tikTokWithoutBack));
+        expect("TikTok missing Back still requires explicit chat context", false,
+                ScreenRules.tiktokOpenedViewer(tikTokWithoutBack, DISPLAY_HEIGHT));
+        expect("TikTok explicit chat tap permits dedicated viewer without Back", true,
+                tikTokOrigin.canOpen(66000) && ScreenRules.tiktokOpenedViewer(tikTokWithoutBack,
+                        DISPLAY_HEIGHT, tikTokOrigin.hasMediaClick(66000)));
+        tikTokOrigin.clear();
+        tikTokViewer.sawViewer(66000);
+        expect("TikTok confirmed shared viewer tolerates a short partial tree", true,
+                tikTokViewer.loading(68000));
+        expect("TikTok unrecognized viewer loading is bounded", false, tikTokViewer.loading(69000));
         ScreenRules.NodeData recyclerVideoPager = new ScreenRules.NodeData("", "", "", "video_pager",
                 "androidx.recyclerview.widget.RecyclerView", false, false, 0, 2300, 1080, 2300);
-        expect("TikTok RecyclerView video pager reports next video even with zero delta", true,
-                ScreenRules.tiktokViewerScroll(recyclerVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
-                        false, 0, 0));
-        ScreenRules.NodeData listFeedPager = new ScreenRules.NodeData("", "", "", "feed_pager",
-                "android.widget.ListView", false, false, 0, 2300, 1080, 2300);
-        expect("TikTok known feed pager overrides generic list exclusion", true,
-                ScreenRules.tiktokViewerScroll(listFeedPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
-                        true, 2400, 0));
+        expect("TikTok opening animation is ignored before swipe detection is armed", false,
+                tikTokViewer.scrolled(recyclerVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        false, 2300, 0, 7, 2300));
+        expect("TikTok opening position stays allowed after arming", false,
+                tikTokViewer.scrolled(recyclerVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 0, 0, 7, 2300));
+        expect("TikTok repeated stationary event is not a swipe", false,
+                tikTokViewer.scrolled(recyclerVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, -1, -1, 7, 2300));
         ScreenRules.NodeData commentsList = new ScreenRules.NodeData("", "", "", "comments_list",
                 "androidx.recyclerview.widget.RecyclerView", false, false, 0, 2300, 1080, 2300);
-        expect("TikTok large comment list scroll remains allowed", false,
-                ScreenRules.tiktokViewerScroll(commentsList, DISPLAY_HEIGHT, DISPLAY_WIDTH,
-                        true, 2400, 0));
+        tikTokComments.open(true, 67000);
+        tikTokViewer.resetScroll();
+        List<ScreenRules.NodeData> tikTokSparseComments = nodes(
+                wideNode("", "", "video_pager", 0, 2300),
+                node("Add comment…", "", "", false, 2100, 100));
+        expect("TikTok sparse comment composer preserves a known shared-video session", true,
+                tikTokComments.allows(tiktok(tikTokSparseComments),
+                        ScreenRules.commentContent(tikTokSparseComments, DISPLAY_HEIGHT, DISPLAY_WIDTH),
+                        true, 72000));
+        expect("TikTok empty comment snapshot does not prompt Chats only", true,
+                tikTokComments.allows(tiktok(nodes()), false, true, 120000));
+        expect("TikTok comment list movement is allowed", false,
+                tikTokViewer.scrolled(commentsList, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 2400, 0, 49, 2400));
+        tikTokComments.requestClose(121000);
+        expect("TikTok Back from comments keeps the video during animation", true,
+                tikTokComments.allows(ScreenRules.Screen.OTHER, false, true, 121100));
+        expect("TikTok closing comments ends only the comment context", false,
+                tikTokComments.allows(tiktok(tikTokWithoutBack), false, true, 121400));
+        expect("TikTok closing comments re-establishes stationary baseline", false,
+                tikTokViewer.scrolled(recyclerVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, -1, -1, 7, 2300));
+        expect("TikTok next page with undefined deltas is still blocked", true,
+                tikTokViewer.scrolled(recyclerVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, -1, -1, 8, 2300));
+        tikTokViewer.clear();
+        expect("TikTok leaving app clears loading permission", false, tikTokViewer.loading(122000));
+        expect("TikTok first stationary event after a new video is allowed", false,
+                tikTokViewer.scrolled(recyclerVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 0, 0, 20, 0));
+        expect("TikTok partial movement stays below paging threshold", false,
+                tikTokViewer.scrolled(recyclerVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 400, 0, 20, 400));
+        expect("TikTok cumulative vertical paging is blocked", true,
+                tikTokViewer.scrolled(recyclerVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 500, 0, 20, 900));
+        ScreenRules.NodeData listFeedPager = new ScreenRules.NodeData("", "", "", "feed_pager",
+                "android.widget.ListView", false, false, 0, 2300, 1080, 2300);
+        expect("TikTok replacing pager source establishes a fresh baseline", false,
+                tikTokViewer.scrolled(listFeedPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 0, 0, 0, 0));
+        expect("TikTok known ListView pager with real movement is blocked", true,
+                tikTokViewer.scrolled(listFeedPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 2400, 0, 1, 2400));
+        expect("TikTok feed pager without other labels is recognized", ScreenRules.Screen.REEL,
+                tiktok(nodes(listFeedPager)));
         ScreenRules.NodeData namedCommentsPager = new ScreenRules.NodeData("", "Comments", "", "video_pager",
                 "androidx.recyclerview.widget.RecyclerView", false, false, 0, 2300, 1080, 2300);
         expect("TikTok comment label overrides known pager ID", false,
-                ScreenRules.tiktokViewerScroll(namedCommentsPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
-                        true, 2400, 0));
+                tikTokViewer.scrolled(namedCommentsPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 2400, 0, 2, 2400));
         ScreenRules.NodeData unnamedList = new ScreenRules.NodeData("", "", "", "",
                 "androidx.recyclerview.widget.RecyclerView", false, false, 0, 2300, 1080, 2300);
-        expect("TikTok unknown comment or message list cannot count as next video", false,
-                ScreenRules.tiktokViewerScroll(unnamedList, DISPLAY_HEIGHT, DISPLAY_WIDTH,
-                        true, 2400, 0));
+        expect("TikTok unidentified list cannot count as next video", false,
+                tikTokViewer.scrolled(unnamedList, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 2400, 0, 2, 2400));
         ScreenRules.NodeData smallVideoPager = new ScreenRules.NodeData("", "", "", "video_pager",
                 "androidx.recyclerview.widget.RecyclerView", false, false, 800, 1400, 1080, 600);
-        expect("TikTok embedded video pager cannot count as full-screen video paging", false,
-                ScreenRules.tiktokViewerScroll(smallVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
-                        true, 2400, 0));
+        expect("TikTok embedded preview cannot count as full-screen paging", false,
+                tikTokViewer.scrolled(smallVideoPager, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 2400, 0, 2, 2400));
         ScreenRules.NodeData unmarkedVideoContainer = new ScreenRules.NodeData("", "", "", "",
                 "android.widget.FrameLayout", false, false, 0, 2300, 1080, 2300);
-        expect("TikTok unmarked viewer needs a substantial vertical scroll", true,
-                ScreenRules.tiktokViewerScroll(unmarkedVideoContainer, DISPLAY_HEIGHT, DISPLAY_WIDTH,
-                        true, -900, 0));
-        expect("TikTok horizontal viewer scroll is not the next video", false,
-                ScreenRules.tiktokViewerScroll(unmarkedVideoContainer, DISPLAY_HEIGHT, DISPLAY_WIDTH,
-                        true, 900, 1100));
-        expect("TikTok unmarked viewer without delta cannot confirm video paging", false,
-                ScreenRules.tiktokViewerScroll(unmarkedVideoContainer, DISPLAY_HEIGHT, DISPLAY_WIDTH,
-                        false, 0, 0));
+        expect("TikTok unmarked viewer needs substantial vertical movement", true,
+                tikTokViewer.scrolled(unmarkedVideoContainer, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, -900, 0, -1, -1));
+        expect("TikTok horizontal movement is allowed", false,
+                tikTokViewer.scrolled(unmarkedVideoContainer, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, 900, 1100, -1, -1));
+        expect("TikTok unmarked viewer layout alone is allowed", false,
+                tikTokViewer.scrolled(unmarkedVideoContainer, DISPLAY_HEIGHT, DISPLAY_WIDTH,
+                        true, -1, -1, -1, -1));
+        expect("TikTok chat context cannot permit For You feed", false,
+                ScreenRules.tiktokOpenedViewer(tiktokForYou, DISPLAY_HEIGHT, true));
+        expect("TikTok chat context cannot permit Friends feed", false,
+                ScreenRules.tiktokOpenedViewer(tiktokFriendsFeed, DISPLAY_HEIGHT, true));
+        expect("TikTok unselected Following heading still rejects feed", false,
+                ScreenRules.tiktokOpenedViewer(nodes(node("Following", "", "", false, 110, 80),
+                        wideNode("", "", "video_pager", 0, 2300)), DISPLAY_HEIGHT, true));
+        expect("TikTok selected bottom Friends tab revokes chat permission", false,
+                ScreenRules.tiktokSharedVideoEligible(nodes(node("Friends", "", "friends_tab",
+                        true, 2250, 80)), DISPLAY_HEIGHT));
+        expect("TikTok selected Home means feed navigation during loading", true,
+                ScreenRules.tiktokFeedNavigation(nodes(node("Home", "", "home_tab", true, 2250, 80)),
+                        DISPLAY_HEIGHT));
+        expect("TikTok blank loading snapshot is not feed navigation", false,
+                ScreenRules.tiktokFeedNavigation(nodes(), DISPLAY_HEIGHT));
+        expect("TikTok commenter profile ends shared-video context", true,
+                ScreenRules.tiktokProfileScreen(nodes(node("12 Following", "", "", false, 400, 80),
+                        node("104 Followers", "", "", false, 400, 80),
+                        node("1.2K Likes", "", "", false, 400, 80)), DISPLAY_HEIGHT));
+        expect("TikTok video controls are not a profile", false,
+                ScreenRules.tiktokProfileScreen(tiktokOpenedVideo, DISPLAY_HEIGHT));
+        tikTokOrigin.navigationClick(123000);
+        expect("TikTok navigation cannot reuse the old chat tap", false,
+                tikTokOrigin.mediaClickFromChat(123100, false, true));
+        expect("TikTok video tap outside a chat cannot create permission", false,
+                tikTokOrigin.mediaClickFromChat(125000, false, false));
+        tikTokOrigin.sawChat(126000);
+        tikTokOrigin.leftChat(180000);
+        expect("TikTok source-less idle-chat handoff permits a viewer with Back", true,
+                tikTokOrigin.canOpen(180100)
+                        && ScreenRules.tiktokOpenedViewer(tiktokOpenedVideo, DISPLAY_HEIGHT));
+        expect("TikTok source-less handoff does not permit a dedicated viewer without Back", false,
+                ScreenRules.tiktokOpenedViewer(tikTokWithoutBack, DISPLAY_HEIGHT,
+                        tikTokOrigin.hasMediaClick(180100)));
 
         expect("Instagram bottom DM tab", true, ScreenRules.instagramMessagesButton(
                 node("", "Messages, 2 unread, tab", "", false, 2250, 80), DISPLAY_HEIGHT));
@@ -563,11 +666,11 @@ public final class ScreenRulesTest {
         expect("Sparse Instagram comment tree needs shared-Reel context", false,
                 ScreenRules.commentsPanel(sparseComments, DISPLAY_HEIGHT, DISPLAY_WIDTH));
         expect("Sparse composer identifies comments inside allowed shared Reel", true,
-                ScreenRules.instagramCommentContent(sparseComments, DISPLAY_HEIGHT, DISPLAY_WIDTH));
+                ScreenRules.commentContent(sparseComments, DISPLAY_HEIGHT, DISPLAY_WIDTH));
         expect("Inline composer cannot start a comment session by itself", false,
-                ScreenRules.instagramCommentPanelEvidence(sparseComments, DISPLAY_HEIGHT, DISPLAY_WIDTH));
+                ScreenRules.commentPanelEvidence(sparseComments, DISPLAY_HEIGHT, DISPLAY_WIDTH));
         expect("Narrow comment heading can establish a sheet", true,
-                ScreenRules.instagramCommentPanelEvidence(nodes(new ScreenRules.NodeData("Comments", "", "", "", "",
+                ScreenRules.commentPanelEvidence(nodes(new ScreenRules.NodeData("Comments", "", "", "", "",
                         false, false, 400, 800, 880, 240, 80)), DISPLAY_HEIGHT, DISPLAY_WIDTH));
         expect("Commenter profile is identifiable outside allowed sheet", true,
                 ScreenRules.instagramProfileScreen(nodes(node("Posts", "", "", false, 400, 80),
@@ -576,10 +679,10 @@ public final class ScreenRulesTest {
         expect("Video rail is not a commenter profile", false,
                 ScreenRules.instagramProfileScreen(countedActions, DISPLAY_HEIGHT, DISPLAY_WIDTH));
         expect("Right-side comment button cannot keep shared comments open", false,
-                ScreenRules.instagramCommentContent(nodes(railNode("", "Comments", 1500)),
+                ScreenRules.commentContent(nodes(railNode("", "Comments", 1500)),
                         DISPLAY_HEIGHT, DISPLAY_WIDTH));
         expect("Generic video list cannot keep comments open", false,
-                ScreenRules.instagramCommentContent(nodes(genericList), DISPLAY_HEIGHT, DISPLAY_WIDTH));
+                ScreenRules.commentContent(nodes(genericList), DISPLAY_HEIGHT, DISPLAY_WIDTH));
 
         SharedReelComments sharedComments = new SharedReelComments();
         sharedComments.open(false, 1000);

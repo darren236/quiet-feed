@@ -2,6 +2,14 @@
 
 Published APKs and source tags are available in [GitHub Releases](https://github.com/darren236/quiet-feed/releases).
 
+## 1.16
+
+- Preserved TikTok chat origin through delayed media taps, idle chats, and slower shared-video loading.
+- Stopped stationary video-pager and opening events from counting as a swipe; real movement or a changed page still blocks the next video.
+- Kept shared-video permission through brief partial viewer trees and sparse comment sheets, including closing comments back to the same video.
+- Cleared TikTok permission on feed/profile navigation, app changes, and mode changes; For You, Following, and Friends feeds remain blocked in chat mode.
+- Added regression sequences for chat opening, loading, comments, and paging. Real-device verification is still required for TikTok layouts and event timing.
+
 ## 1.15
 
 - Preserved Instagram chat origin when a Reel tap arrives after the viewer starts opening, including an idle chat.

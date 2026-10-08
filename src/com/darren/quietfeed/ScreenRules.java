@@ -308,6 +308,7 @@ final class ScreenRules {
 
             if (isLargeVisibleNode(n, displayHeight, displayWidth)
                     && (n.idContains("video_player") || n.idContains("video_pager")
+                            || n.idContains("feed_pager")
                             || n.idContains("video_view")
                             || n.idContains("aweme_video") || n.idContains("feed_video")
                             || n.className.contains("surfaceview")
@@ -398,35 +399,56 @@ final class ScreenRules {
     }
 
     static boolean tiktokOpenedViewer(List<NodeData> nodes, int displayHeight) {
-        boolean backOrClose = false;
-        boolean selectedFeedTab = false;
-        for (NodeData n : nodes) {
-            if (isViewerNavigation(n, displayHeight)) backOrClose = true;
-            if (n.selected && n.top < displayHeight / 4
-                    && (n.labelIs("for you") || n.labelIs("following")
-                            || n.labelIs("friends"))) {
-                selectedFeedTab = true;
-            }
-        }
-        return backOrClose && !selectedFeedTab;
+        return tiktokOpenedViewer(nodes, displayHeight, false);
     }
 
-    /** Recognizes video paging without treating comment-list scrolling as the next video. */
-    static boolean tiktokViewerScroll(NodeData source, int displayHeight, int displayWidth,
-                                      boolean hasScrollDelta, int deltaY, int deltaX) {
-        if (source == null || source.idContains("comment") || source.labelContains("comments"))
-            return false;
-        if (source.width < displayWidth * 2 / 3 || source.height < displayHeight * 3 / 5)
-            return false;
-        // A known video pager may be implemented as a RecyclerView or another list.
-        if (source.idContains("video_pager") || source.idContains("feed_pager")) return true;
-        if (source.className.contains("scrollview") || source.className.contains("recyclerview")
-                || source.className.contains("listview")) return false;
-        if (source.className.contains("viewpager")) return true;
-        if (!hasScrollDelta) return false;
-        long vertical = Math.abs((long) deltaY);
-        long horizontal = Math.abs((long) deltaX);
-        return vertical >= displayHeight / 3 && vertical > horizontal;
+    static boolean tiktokOpenedViewer(List<NodeData> nodes, int displayHeight,
+                                      boolean confirmedChatContext) {
+        if (!tiktokSharedVideoEligible(nodes, displayHeight)) return false;
+        boolean backOrClose = false;
+        boolean dedicatedViewer = false;
+        boolean selectedHome = false;
+        for (NodeData n : nodes) {
+            if (isViewerNavigation(n, displayHeight)) backOrClose = true;
+            if (isSelectedTab(n, "home", displayHeight)) selectedHome = true;
+            if (n.top < displayHeight / 6 && n.bottom > displayHeight * 4 / 5
+                    && (n.idContains("video_player") || n.idContains("video_pager")
+                        || n.idContains("feed_pager") || n.idContains("video_view")
+                        || n.idContains("aweme_video") || n.idContains("feed_video"))) dedicatedViewer = true;
+        }
+        return (backOrClose || (confirmedChatContext && dedicatedViewer))
+                && (!selectedHome || dedicatedViewer);
+    }
+
+    static boolean tiktokFeedNavigation(List<NodeData> nodes, int displayHeight) {
+        if (!tiktokSharedVideoEligible(nodes, displayHeight)) return true;
+        for (NodeData n : nodes) if (isSelectedTab(n, "home", displayHeight)) return true;
+        return false;
+    }
+
+    static boolean tiktokSharedVideoEligible(List<NodeData> nodes, int displayHeight) {
+        for (NodeData n : nodes) {
+            if (n.top < displayHeight / 4 && (n.labelIs("for you")
+                    || n.labelIs("following") || n.labelIs("friends"))) return false;
+            if (isSelectedTab(n, "friends", displayHeight)
+                    || isSelectedTab(n, "profile", displayHeight) || isSelectedTab(n, "search", displayHeight)
+                    || isSelectedTab(n, "discover", displayHeight)) return false;
+        }
+        return true;
+    }
+
+    static boolean tiktokProfileScreen(List<NodeData> nodes, int displayHeight) {
+        boolean followers = false;
+        boolean following = false;
+        boolean likes = false;
+        for (NodeData n : nodes) {
+            if (n.top >= displayHeight * 3 / 5) continue;
+            if (n.labelIs("edit profile")) return true;
+            if (n.labelIs("followers") || n.labelMatches("[0-9.,km ]+ followers")) followers = true;
+            if (n.labelIs("following") || n.labelMatches("[0-9.,km ]+ following")) following = true;
+            if (n.labelIs("likes") || n.labelMatches("[0-9.,km ]+ likes")) likes = true;
+        }
+        return followers && following && likes;
     }
 
     static boolean commentsPanel(List<NodeData> nodes, int displayHeight, int displayWidth) {
@@ -477,14 +499,14 @@ final class ScreenRules {
     }
 
     /**
-     * Sparse Instagram sheets may expose only their composer or comment rows.
+     * Sparse comment sheets may expose only their composer or comment rows.
      * Use this only after a comment-open action on an already allowed shared
      * Reel; these signals alone must not exempt an arbitrary video screen.
      */
-    static boolean instagramCommentContent(List<NodeData> nodes,
+    static boolean commentContent(List<NodeData> nodes,
                                            int displayHeight, int displayWidth) {
         if (commentsPanel(nodes, displayHeight, displayWidth)
-                || instagramCommentPanelEvidence(nodes, displayHeight, displayWidth)) return true;
+                || commentPanelEvidence(nodes, displayHeight, displayWidth)) return true;
         for (NodeData n : nodes) {
             boolean videoRail = n.left >= displayWidth * 2 / 3
                     && n.width <= displayWidth / 3 && n.top > displayHeight / 3;
@@ -500,7 +522,7 @@ final class ScreenRules {
     }
 
     /** Panel evidence that does not depend on a prior comment-open action. */
-    static boolean instagramCommentPanelEvidence(List<NodeData> nodes,
+    static boolean commentPanelEvidence(List<NodeData> nodes,
                                                  int displayHeight, int displayWidth) {
         int replyActions = 0;
         for (NodeData n : nodes) {

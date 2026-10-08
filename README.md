@@ -8,7 +8,7 @@ QuietFeed is a small, native Android app that blocks opened short-video viewers 
 [![Latest release](https://img.shields.io/github/v/release/darren236/quiet-feed)](https://github.com/darren236/quiet-feed/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**[Download QuietFeed 1.15 APK](https://github.com/darren236/quiet-feed/releases/download/v1.15/QuietFeed-1.15.apk)** · [Release notes](CHANGELOG.md)
+**[Download QuietFeed 1.16 APK](https://github.com/darren236/quiet-feed/releases/download/v1.16/QuietFeed-1.16.apk)** · [Release notes](CHANGELOG.md)
 
 Requires **Android 6.0 or newer (API 23)**; targets **Android 16 (API 36)**. Detection currently uses English interface labels.
 
@@ -50,7 +50,7 @@ If Android shows **Restricted setting**, open **Settings → Apps → QuietFeed:
 For a USB-connected phone with debugging enabled and `adb` on your path:
 
 ```sh
-adb install -r dist/QuietFeed-1.15.apk
+adb install -r dist/QuietFeed-1.16.apk
 ```
 
 ## Samsung shortcut for banking apps
@@ -105,7 +105,7 @@ Debug builds and checks do not require release signing files. The `screenRulesTe
 ./build.sh
 ```
 
-The result is `dist/QuietFeed-1.15.apk`. On a fresh checkout, the script creates `build/quietfeed.keystore` and a random password in `build/signing.properties`; both are ignored by Git. Back them up securely and reuse them for your own subsequent releases. A locally generated key differs from the official release key, so that build cannot update an official APK in place. A direct Gradle release build is unsigned when local signing files are absent.
+The result is `dist/QuietFeed-1.16.apk`. On a fresh checkout, the script creates `build/quietfeed.keystore` and a random password in `build/signing.properties`; both are ignored by Git. Back them up securely and reuse them for your own subsequent releases. A locally generated key differs from the official release key, so that build cannot update an official APK in place. A direct Gradle release build is unsigned when local signing files are absent.
 
 ### Code structure
 
