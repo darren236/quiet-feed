@@ -365,6 +365,11 @@ final class ScreenRules {
     }
 
     static boolean instagramOpenedViewer(List<NodeData> nodes, int displayHeight) {
+        return instagramOpenedViewer(nodes, displayHeight, false);
+    }
+
+    static boolean instagramOpenedViewer(List<NodeData> nodes, int displayHeight,
+                                         boolean explicitChatMediaClick) {
         boolean backOrClose = false;
         boolean selectedHome = false;
         boolean dedicatedViewer = false;
@@ -378,7 +383,18 @@ final class ScreenRules {
                             || n.idContains("reel_pager") || n.idContains("reels_viewer")
                             || n.idContains("reel_viewer"))) dedicatedViewer = true;
         }
-        return backOrClose && (!selectedHome || dedicatedViewer);
+        return (backOrClose || (explicitChatMediaClick && dedicatedViewer))
+                && (!selectedHome || dedicatedViewer);
+    }
+
+    static boolean instagramFeedNavigation(List<NodeData> nodes, int displayHeight) {
+        for (NodeData n : nodes) {
+            if (isSelectedTab(n, "home", displayHeight) || isSelectedTab(n, "reels", displayHeight)
+                    || isSelectedTab(n, "explore", displayHeight)
+                    || isSelectedTab(n, "search", displayHeight)
+                    || isSelectedTab(n, "profile", displayHeight)) return true;
+        }
+        return false;
     }
 
     static boolean tiktokOpenedViewer(List<NodeData> nodes, int displayHeight) {

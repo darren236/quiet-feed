@@ -31,6 +31,7 @@ Use test accounts and record the phone model, Android version, social-app versio
 
 - [ ] **Instagram Block Reels:** Home previews remain visible; the Reels tab and an opened Reel show the notice and return Home.
 - [ ] **Instagram DM mode:** inbox and individual chats stay available; Open messages reaches DMs from other screens.
+- [ ] **Instagram shared Reel loading:** after leaving a chat idle, open a shared Reel; opening animations and slower loading must not send you Home. Then swipe to another Reel and confirm it does.
 - [ ] **Instagram shared Reel:** opening a video from a chat allows it; opening, scrolling, and closing comments keeps that same Reel available; the first video swipe returns Home.
 - [ ] **Instagram origin:** an unrelated Reel reached through feed navigation does not inherit a chat allowance.
 - [ ] **Facebook:** feed previews remain visible; opened Reels return Home; detected comments and comment scrolling remain available.

@@ -16,8 +16,8 @@ android {
         applicationId 'com.darren.quietfeed'
         minSdk 23
         targetSdk 36
-        versionCode 15
-        versionName '1.14'
+        versionCode 16
+        versionName '1.15'
     }
 
     sourceSets {
@@ -55,6 +55,7 @@ def compileRules = tasks.register('compileScreenRuleTests', JavaCompile) {
     source = files('../../src/com/darren/quietfeed/ScreenRules.java',
             '../../src/com/darren/quietfeed/ChatVideoOrigin.java',
             '../../src/com/darren/quietfeed/SharedReelComments.java',
+            '../../src/com/darren/quietfeed/ReelViewerState.java',
             '../../tests/com/darren/quietfeed/ScreenRulesTest.java')
     classpath = files()
     destinationDirectory = ruleClasses

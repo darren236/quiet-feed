@@ -59,6 +59,7 @@ public final class ShieldService extends AccessibilityService {
     private ScreenRules.Screen lastInstagramScreen = ScreenRules.Screen.OTHER;
     private final ChatVideoOrigin instagramOrigin = new ChatVideoOrigin();
     private final SharedReelComments instagramComments = new SharedReelComments();
+    private final ReelViewerState instagramViewer = new ReelViewerState();
     private long commentsTransitionUntil;
     private long navigationGraceUntil;
     private boolean dmReelActive;
@@ -93,8 +94,7 @@ public final class ShieldService extends AccessibilityService {
                     if ("instagram_mode".equals(key)) {
                         instagramComments.clear();
                         instagramOrigin.clear();
-                        dmReelActive = false;
-                        dmReelAllowedAt = 0;
+                        clearInstagramReel();
                     }
                     handler.removeCallbacks(inspection);
                     nextInspectionAt = 0;
@@ -144,6 +144,7 @@ public final class ShieldService extends AccessibilityService {
             if (commentClick) {
                 if (INSTAGRAM.equals(eventPackage) && "dm".equals(instagramMode())) {
                     instagramComments.open(dmReelActive, now);
+                    instagramViewer.resetScroll();
                 }
                 commentsTransitionUntil = now + COMMENTS_TRANSITION_MS;
                 cancelPendingExit();
@@ -153,23 +154,34 @@ public final class ShieldService extends AccessibilityService {
             }
             if (INSTAGRAM.equals(eventPackage) && "dm".equals(instagramMode())) {
                 boolean chat = false;
+                boolean chatHandoff = lastInstagramScreen == ScreenRules.Screen.DM_THREAD
+                        || instagramOrigin.canOpen(now);
                 AccessibilityNodeInfo root = findTargetRoot();
-                if (root != null && INSTAGRAM.equals(asString(root.getPackageName()))
-                        && ScreenRules.instagram(collectScreenNodes(root),
-                                getResources().getDisplayMetrics().heightPixels,
-                                getResources().getDisplayMetrics().widthPixels)
-                                == ScreenRules.Screen.DM_THREAD) {
-                    instagramOrigin.sawChat(now);
-                    chat = true;
+                if (root != null && INSTAGRAM.equals(asString(root.getPackageName()))) {
+                    List<ScreenRules.NodeData> clickNodes = collectScreenNodes(root);
+                    int h = getResources().getDisplayMetrics().heightPixels;
+                    int w = getResources().getDisplayMetrics().widthPixels;
+                    ScreenRules.Screen clickScreen = ScreenRules.instagram(clickNodes, h, w);
+                    chat = clickScreen == ScreenRules.Screen.DM_THREAD;
+                    if (chat) instagramOrigin.sawChat(now);
+                    chatHandoff = (lastInstagramScreen == ScreenRules.Screen.DM_THREAD
+                            || instagramOrigin.canOpen(now))
+                            && (clickScreen == ScreenRules.Screen.REEL
+                                || (clickScreen == ScreenRules.Screen.OTHER
+                                    && !ScreenRules.instagramFeedNavigation(clickNodes, h)
+                                    && !ScreenRules.instagramProfileScreen(clickNodes, h, w)));
                 }
-                if (root == null && lastInstagramScreen == ScreenRules.Screen.DM_THREAD
-                        && instagramOrigin.transitioning(now)) chat = true;
-                if (chat) {
-                    if ((source != null && isPossibleMediaOpen(source))
-                            || eventLabel(event).contains("reel")
-                            || eventLabel(event).contains("video")) instagramOrigin.mediaClick(now);
+                boolean navigationClick = isInstagramNavigationClick(event, source);
+                boolean mediaClick = (source != null && isPossibleMediaOpen(source))
+                        || eventLabel(event).contains("reel") || eventLabel(event).contains("video");
+                // The click's source can still belong to the chat after the active root changed.
+                if (!navigationClick && mediaClick && instagramOrigin.mediaClickFromChat(now, chat,
+                        chatHandoff)) {
+                    cancelPendingExit();
+                    exitSuppressedUntil = 0;
+                    hideExitNotice();
                 }
-                if (isInstagramNavigationClick(event, source)
+                if (navigationClick
                         || (instagramComments.isOpen() && isBackOrCloseClick(event, source))) {
                     if (instagramComments.isOpen() && isBackOrCloseClick(event, source)) {
                         // Closing a sheet returns to the same allowed shared Reel.
@@ -177,8 +189,7 @@ public final class ShieldService extends AccessibilityService {
                     } else {
                         instagramComments.clear();
                         instagramOrigin.navigationClick(now);
-                        dmReelActive = false;
-                        dmReelAllowedAt = 0;
+                        clearInstagramReel();
                     }
                 }
             } else if (source != null) {
@@ -211,6 +222,7 @@ public final class ShieldService extends AccessibilityService {
 
         if (INSTAGRAM.equals(eventPackage) && instagramComments.isOpen()
                 && currentInstagramCommentsAllowed(now)) {
+            instagramViewer.resetScroll();
             commentsTransitionUntil = 0;
             cancelPendingExit();
             exitSuppressedUntil = 0;
@@ -236,9 +248,8 @@ public final class ShieldService extends AccessibilityService {
 
         if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED
                 && INSTAGRAM.equals(eventPackage) && dmReelActive
-                && lastInstagramScreen == ScreenRules.Screen.REEL
-                && now >= dmReelAllowedAt + DM_SCROLL_ARM_DELAY_MS
-                && currentIsVideoViewer(eventPackage) && isLargeScroll(event)) {
+                && currentIsVideoViewer(eventPackage)
+                && isInstagramViewerPaging(event, now >= dmReelAllowedAt + DM_SCROLL_ARM_DELAY_MS)) {
             exitTarget(eventPackage, true);
             return;
         }
@@ -274,6 +285,12 @@ public final class ShieldService extends AccessibilityService {
         super.onDestroy();
     }
 
+    private void clearInstagramReel() {
+        dmReelActive = false;
+        dmReelAllowedAt = 0;
+        instagramViewer.clear();
+    }
+
     private void clearTargetState() {
         handler.removeCallbacks(inspection);
         nextInspectionAt = 0;
@@ -283,8 +300,7 @@ public final class ShieldService extends AccessibilityService {
         instagramComments.clear();
         navigationGraceUntil = 0;
         commentsTransitionUntil = 0;
-        dmReelActive = false;
-        dmReelAllowedAt = 0;
+        clearInstagramReel();
         lastTikTokScreen = ScreenRules.Screen.OTHER;
         pendingTikTokOpenUntil = 0;
         pendingTikTokOpenStartedAt = 0;
@@ -320,7 +336,7 @@ public final class ShieldService extends AccessibilityService {
         if (INSTAGRAM.equals(packageName) && "off".equals(instagramMode())) {
             instagramOrigin.clear();
             instagramComments.clear();
-            dmReelActive = false;
+            clearInstagramReel();
             hideOverlay();
             return;
         }
@@ -345,6 +361,7 @@ public final class ShieldService extends AccessibilityService {
         if (ScreenRules.commentsPanel(nodes, displayHeight, displayWidth)) {
             if (INSTAGRAM.equals(packageName) && "dm".equals(instagramMode())) {
                 instagramComments.open(dmReelActive, now);
+                instagramViewer.resetScroll();
             }
             // Keep any existing shared-video grant while reading or writing comments.
             cancelPendingExit();
@@ -369,8 +386,7 @@ public final class ShieldService extends AccessibilityService {
             if (ScreenRules.instagramProfileScreen(nodes, displayHeight, displayWidth)) {
                 instagramComments.clear();
                 instagramOrigin.clear();
-                dmReelActive = false;
-                dmReelAllowedAt = 0;
+                clearInstagramReel();
             }
             if ("dm".equals(mode) && instagramComments.allows(screen, commentContent, dmReelActive, now)
                     && ScreenRules.instagramSharedReelEligible(nodes, displayHeight, true)) {
@@ -380,13 +396,20 @@ public final class ShieldService extends AccessibilityService {
                 hideOverlay();
                 return;
             }
+            if ("dm".equals(mode) && lastInstagramScreen == ScreenRules.Screen.DM_THREAD
+                    && ((screen == ScreenRules.Screen.REEL
+                            && ScreenRules.instagramOpenedViewer(nodes, displayHeight))
+                        || (screen == ScreenRules.Screen.OTHER
+                            && !ScreenRules.instagramFeedNavigation(nodes, displayHeight)))
+                    && !ScreenRules.instagramProfileScreen(nodes, displayHeight, displayWidth)) {
+                instagramOrigin.leftChat(now);
+            }
             lastInstagramScreen = screen;
 
             if ("reels".equals(mode)) {
                 instagramOrigin.clear();
                 instagramComments.clear();
-                dmReelActive = false;
-                dmReelAllowedAt = 0;
+                clearInstagramReel();
                 if (screen == ScreenRules.Screen.REEL) exitTarget(packageName);
                 else hideOverlay();
                 return;
@@ -395,36 +418,45 @@ public final class ShieldService extends AccessibilityService {
             // DM mode deliberately fails closed when the screen cannot be identified.
             if (screen == ScreenRules.Screen.DM_THREAD || screen == ScreenRules.Screen.DM_INBOX
                     || screen == ScreenRules.Screen.LOGIN) {
-                dmReelActive = false;
-                dmReelAllowedAt = 0;
+                clearInstagramReel();
                 if (screen == ScreenRules.Screen.DM_THREAD) instagramOrigin.sawChat(now);
                 else instagramOrigin.clear();
                 hideOverlay();
             } else if (screen == ScreenRules.Screen.REEL) {
                 if (!ScreenRules.instagramSharedReelEligible(nodes, displayHeight, true)) {
                     instagramComments.clear();
-                    dmReelActive = false;
-                    dmReelAllowedAt = 0;
+                    clearInstagramReel();
                     instagramOrigin.clear();
                 }
                 // A bounded chat transition covers click events without a source.
                 // Back/Close and feed-tab checks distinguish the opened shared viewer.
                 if (!dmReelActive && instagramOrigin.canOpen(now)
-                        && ScreenRules.instagramOpenedViewer(nodes, displayHeight)) {
+                        && ScreenRules.instagramOpenedViewer(nodes, displayHeight,
+                                instagramOrigin.hasMediaClick(now))) {
                     dmReelActive = true;
                     dmReelAllowedAt = now;
+                    instagramViewer.clear();
                     instagramOrigin.clear();
+                    cancelPendingExit();
+                    exitSuppressedUntil = 0;
+                    hideExitNotice();
                 }
-                if (dmReelActive) hideOverlay();
+                if (dmReelActive) {
+                    instagramViewer.sawViewer(now);
+                    hideOverlay();
+                }
                 else exitTarget(packageName);
+            } else if (dmReelActive && instagramViewer.loading(now)
+                    && !ScreenRules.instagramFeedNavigation(nodes, displayHeight)) {
+                // Partial trees during loading must not revoke an already allowed shared Reel.
+                hideOverlay();
+                scheduleInspection(150);
             } else if (now < navigationGraceUntil || instagramOrigin.transitioning(now)) {
-                dmReelActive = false;
-                dmReelAllowedAt = 0;
+                clearInstagramReel();
                 hideOverlay();
                 scheduleInspection(150);
             } else {
-                dmReelActive = false;
-                dmReelAllowedAt = 0;
+                clearInstagramReel();
                 instagramOrigin.clear();
                 showDmGate(packageName);
             }
@@ -544,8 +576,7 @@ public final class ShieldService extends AccessibilityService {
                 }
                 if (performGlobalAction(GLOBAL_ACTION_HOME)) {
                     instagramComments.clear();
-                    dmReelActive = false;
-                    dmReelAllowedAt = 0;
+                    clearInstagramReel();
                     instagramOrigin.clear();
                     tiktokSharedVideoActive = false;
                     tiktokVideoAllowedAt = 0;
@@ -772,7 +803,7 @@ public final class ShieldService extends AccessibilityService {
         if (ScreenRules.instagramProfileScreen(nodes, h, w)) {
             instagramComments.clear();
             instagramOrigin.clear();
-            dmReelActive = false;
+            clearInstagramReel();
             return false;
         }
         return instagramComments.allows(ScreenRules.instagram(nodes, h, w),
@@ -832,15 +863,15 @@ public final class ShieldService extends AccessibilityService {
         return false;
     }
 
-    private boolean isLargeScroll(AccessibilityEvent event) {
+    private boolean isInstagramViewerPaging(AccessibilityEvent event, boolean armed) {
         AccessibilityNodeInfo source = event.getSource();
         if (source == null || isCommentScrollSource(source)) return false;
-        source.getBoundsInScreen(tempBounds);
         int height = getResources().getDisplayMetrics().heightPixels;
         int width = getResources().getDisplayMetrics().widthPixels;
-        if (tempBounds.height() < height * 2 / 3 || tempBounds.width() < width * 2 / 3) return false;
-        // Some pagers report zero delta even when a new Reel becomes visible.
-        return true;
+        boolean hasDelta = Build.VERSION.SDK_INT >= 28;
+        return instagramViewer.scrolled(describe(source), height, width, armed,
+                hasDelta ? event.getScrollDeltaY() : 0, hasDelta ? event.getScrollDeltaX() : 0,
+                event.getItemCount() > 1 ? event.getFromIndex() : -1, event.getScrollY());
     }
 
     private boolean isConfirmedInstagramViewerPaging(AccessibilityEvent event) {
@@ -964,7 +995,7 @@ public final class ShieldService extends AccessibilityService {
         hideOverlay();
         instagramOrigin.clear();
         instagramComments.clear();
-        dmReelActive = false;
+        clearInstagramReel();
         navigationGraceUntil = SystemClock.elapsedRealtime() + 2000;
         // Reacquire the app tree after removing our overlay; old nodes can be stale.
         handler.postDelayed(new Runnable() {

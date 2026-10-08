@@ -10,7 +10,7 @@ body:
     id: quietfeed-version
     attributes:
       label: QuietFeed version
-      placeholder: "For example: 1.14"
+      placeholder: "For example: 1.15"
     validations:
       required: true
   - type: textarea

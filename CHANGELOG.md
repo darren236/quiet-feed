@@ -2,6 +2,15 @@
 
 Published APKs and source tags are available in [GitHub Releases](https://github.com/darren236/quiet-feed/releases).
 
+## 1.15
+
+- Preserved Instagram chat origin when a Reel tap arrives after the viewer starts opening, including an idle chat.
+- Extended confirmed chat-media loading grace and kept permission through brief incomplete viewer snapshots.
+- Allowed a confirmed chat tap to open a dedicated Reel viewer when its Back control is absent from the accessibility tree.
+- Replaced size-only Instagram scroll detection with viewer movement and page-index evidence so opening/layout events do not count as a new Reel.
+- Reset paging state around comments and when leaving the shared viewer.
+- Added regression coverage for delayed taps, loading gaps, comment transitions, and actual paging.
+
 ## 1.14
 
 - Added real Android emulator screenshots and a clearer project overview.

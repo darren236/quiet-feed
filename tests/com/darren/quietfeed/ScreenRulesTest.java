@@ -443,14 +443,121 @@ public final class ScreenRulesTest {
         expect("Stale chat cannot permit unrelated viewer", false, origin.canOpen(2500));
         origin.mediaClick(3000);
         expect("Explicit media tap survives a slower load", true, origin.canOpen(5200));
-        expect("Explicit tap expires", false, origin.canOpen(6000));
-        origin.navigationClick(7000);
-        origin.sawChat(7100);
-        expect("Navigation rejects stale chat snapshot", false, origin.canOpen(7200));
-        origin.sawChat(9000);
-        origin.mediaClick(9100);
+        expect("Explicit tap loading remains allowed past old timeout", true, origin.transitioning(7000));
+        expect("Explicit tap expires", false, origin.canOpen(11000));
+        origin.navigationClick(12000);
+        origin.sawChat(12100);
+        expect("Navigation rejects stale chat snapshot", false, origin.canOpen(12200));
+        origin.sawChat(14000);
+        origin.mediaClick(14100);
         origin.clear();
-        expect("Leaving app clears shared video evidence", false, origin.canOpen(9200));
+        expect("Leaving app clears shared video evidence", false, origin.canOpen(14200));
+
+        ChatVideoOrigin delayedTap = new ChatVideoOrigin();
+        delayedTap.sawChat(1000);
+        expect("Idle chat tap survives root already changing to viewer", true,
+                delayedTap.mediaClickFromChat(61000, false, true));
+        expect("Delayed shared Reel still has origin during loading", true, delayedTap.canOpen(66000));
+        expect("Partial loading screen cannot expire earlier than media origin", true,
+                delayedTap.transitioning(66000));
+        expect("Loading grace remains bounded", false, delayedTap.canOpen(69000));
+        delayedTap.navigationClick(70000);
+        expect("Navigation rejects delayed media click on old chat snapshot", false,
+                delayedTap.mediaClickFromChat(70100, false, true));
+        expect("New explicit media tap in a confirmed chat survives quick Back navigation", true,
+                delayedTap.mediaClickFromChat(70200, true, false));
+        expect("Confirmed chat tap restores origin immediately", true, delayedTap.canOpen(70300));
+        delayedTap.clear();
+        expect("Media tap outside chats cannot establish origin", false,
+                delayedTap.mediaClickFromChat(72000, false, false));
+        expect("First observed chat click can establish origin", true,
+                delayedTap.mediaClickFromChat(73000, true, false));
+        ChatVideoOrigin idleChat = new ChatVideoOrigin();
+        idleChat.sawChat(1000);
+        idleChat.leftChat(61000);
+        expect("Idle chat handoff starts grace when viewer opens", true, idleChat.canOpen(61100));
+        expect("Missing click handoff is still bounded", false, idleChat.canOpen(62500));
+        idleChat.navigationClick(63000);
+        idleChat.leftChat(63100);
+        expect("Navigation cannot rearm old thread handoff", false, idleChat.canOpen(63200));
+        idleChat.clear();
+        idleChat.leftChat(65000);
+        expect("Unobserved chat cannot manufacture handoff evidence", false, idleChat.canOpen(65100));
+        List<ScreenRules.NodeData> viewerWithoutBack = nodes(
+                wideNode("", "", "clips_viewer", 0, 2300), railNode("Like", "", 1300),
+                railNode("Comment", "", 1500), railNode("Share", "", 1700));
+        expect("Source-less fallback still requires viewer navigation", false,
+                ScreenRules.instagramOpenedViewer(viewerWithoutBack, DISPLAY_HEIGHT));
+        expect("Explicit chat media tap allows dedicated viewer with missing Back label", true,
+                ScreenRules.instagramOpenedViewer(viewerWithoutBack, DISPLAY_HEIGHT, true));
+        expect("Explicit tap cannot make generic feed preview a shared viewer", false,
+                ScreenRules.instagramOpenedViewer(instagramFeed, DISPLAY_HEIGHT, true));
+        expect("Explicit chat tap cannot permit selected Reels feed", false,
+                ScreenRules.instagramOpenedViewer(reelTab, DISPLAY_HEIGHT, true));
+
+        ReelViewerState sharedViewer = new ReelViewerState();
+        ScreenRules.NodeData instagramPager = new ScreenRules.NodeData("", "", "", "clips_viewer",
+                "androidx.recyclerview.widget.RecyclerView", false, false, 0, 2300, 1080, 2300);
+        ScreenRules.NodeData instagramCommentsList = new ScreenRules.NodeData("", "", "", "comments_list",
+                "androidx.recyclerview.widget.RecyclerView", false, false, 0, 2300, 1080, 2300);
+        sharedViewer.sawViewer(1000);
+        expect("Allowed shared viewer survives a partial loading tree", true, sharedViewer.loading(3000));
+        expect("Unrecognized viewer grace expires", false, sharedViewer.loading(4000));
+        expect("Initial full-size scroll event establishes baseline without leaving", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 0, 0, 17, 0));
+        expect("Repeated layout event is not the next Reel", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 0, 0, 17, 0));
+        expect("Comment list movement cannot advance shared Reel", false,
+                sharedViewer.scrolled(instagramCommentsList, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 2400, 0, 49, 2400));
+        expect("Ignored comment list leaves viewer baseline unchanged", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 0, 0, 17, 0));
+        expect("Actual next Reel is detected with zero reported delta", true,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 0, 0, 18, 0));
+        sharedViewer.resetScroll();
+        expect("Android unset scroll deltas establish a baseline", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, -1, -1, 17, 0));
+        expect("Android unset deltas do not mask a real next-page index", true,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, -1, -1, 18, 0));
+        sharedViewer.resetScroll();
+        expect("Comment transitions retain permission for the same shared viewer", true, sharedViewer.loading(3000));
+        expect("Closing comments re-establishes scroll baseline", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 0, 0, 18, 0));
+        expect("Swipe after closing comments is still blocked", true,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 900, 0, 19, 900));
+        sharedViewer.clear();
+        expect("App switch revokes loading permission", false, sharedViewer.loading(3100));
+        expect("Opening animation can populate paging baseline before scroll is armed", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, false, 2400, 0, 8, 2400));
+        expect("Opening position does not become a swipe after arming", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 0, 0, 8, 2400));
+        expect("Next index after opening animation is blocked", true,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 0, 0, 9, 2400));
+        sharedViewer.resetScroll();
+        expect("Unindexed pager establishes its scroll position", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 0, 0, -1, 0));
+        expect("Small partial movement does not mean next Reel", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 400, 0, -1, 400));
+        expect("Cumulative vertical paging is detected", true,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 500, 0, -1, 900));
+        sharedViewer.resetScroll();
+        expect("Horizontal swipe is not another Reel", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 100, 1200, 20, 0));
+        expect("Horizontal update does not poison subsequent layout event", false,
+                sharedViewer.scrolled(instagramPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 0, 0, 20, 0));
+        ScreenRules.NodeData unrelatedContainer = new ScreenRules.NodeData("", "", "", "root",
+                "android.widget.FrameLayout", false, false, 0, 2300, 1080, 2300);
+        expect("Large container layout alone cannot count as viewer paging", false,
+                sharedViewer.scrolled(unrelatedContainer, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 2400, 0, 21, 2400));
+        ScreenRules.NodeData embeddedPager = new ScreenRules.NodeData("", "", "", "clips_viewer",
+                "androidx.recyclerview.widget.RecyclerView", false, false, 800, 1400, 1080, 600);
+        expect("Embedded chat Reel preview scroll is not full-screen paging", false,
+                sharedViewer.scrolled(embeddedPager, DISPLAY_HEIGHT, DISPLAY_WIDTH, true, 2400, 0, 21, 2400));
+        expect("Selected Home identifies leaving shared viewer", true,
+                ScreenRules.instagramFeedNavigation(nodes(node("Home", "", "", true, 2250, 80)), DISPLAY_HEIGHT));
+        expect("Empty loading tree is not feed navigation", false,
+                ScreenRules.instagramFeedNavigation(nodes(), DISPLAY_HEIGHT));
+        expect("Reel caption mentioning Home is not feed navigation", false,
+                ScreenRules.instagramFeedNavigation(nodes(node("Home", "", "", false, 1300, 80)), DISPLAY_HEIGHT));
         List<ScreenRules.NodeData> sparseComments = nodes(
                 node("Add a comment…", "", "", false, 2100, 100));
         expect("Sparse Instagram comment tree needs shared-Reel context", false,
